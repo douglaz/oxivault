@@ -200,7 +200,7 @@ impl PsbtManager {
                         witness_utxo.value,
                         ecdsa_type,
                     )
-                    .map_err(|e| Error::PsbtError(format!("P2WPKH sighash failed: {:?}", e)));
+                    .map_err(|e| Error::PsbtError(format!("P2WPKH sighash failed: {e:?}")));
             }
 
             // P2SH-P2WPKH (Nested Segwit)
@@ -215,7 +215,7 @@ impl PsbtManager {
                                 ecdsa_type,
                             )
                             .map_err(|e| {
-                                Error::PsbtError(format!("P2SH-P2WPKH sighash failed: {:?}", e))
+                                Error::PsbtError(format!("P2SH-P2WPKH sighash failed: {e:?}"))
                             });
                     }
                 }
@@ -236,7 +236,7 @@ impl PsbtManager {
                                 ecdsa_type.to_u32(),
                             )
                             .map_err(|e| {
-                                Error::PsbtError(format!("P2PKH sighash failed: {:?}", e))
+                                Error::PsbtError(format!("P2PKH sighash failed: {e:?}"))
                             })?;
                         // Convert legacy sighash to SegwitV0Sighash for uniform return type
                         return Ok(bitcoin::sighash::SegwitV0Sighash::from_byte_array(
@@ -247,7 +247,7 @@ impl PsbtManager {
                 // Fallback to using witness_utxo for legacy (not standard but can work)
                 let legacy_hash = sighash_cache
                     .legacy_signature_hash(index, &witness_utxo.script_pubkey, ecdsa_type.to_u32())
-                    .map_err(|e| Error::PsbtError(format!("P2PKH sighash failed: {:?}", e)))?;
+                    .map_err(|e| Error::PsbtError(format!("P2PKH sighash failed: {e:?}")))?;
                 return Ok(bitcoin::sighash::SegwitV0Sighash::from_byte_array(
                     legacy_hash.to_byte_array(),
                 ));
@@ -263,7 +263,7 @@ impl PsbtManager {
                 if prevout.script_pubkey.is_p2pkh() {
                     let legacy_hash = sighash_cache
                         .legacy_signature_hash(index, &prevout.script_pubkey, ecdsa_type.to_u32())
-                        .map_err(|e| Error::PsbtError(format!("P2PKH sighash failed: {:?}", e)))?;
+                        .map_err(|e| Error::PsbtError(format!("P2PKH sighash failed: {e:?}")))?;
                     return Ok(bitcoin::sighash::SegwitV0Sighash::from_byte_array(
                         legacy_hash.to_byte_array(),
                     ));
@@ -397,7 +397,7 @@ impl PsbtManager {
 
     /// Parse PSBT from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let psbt = Psbt::deserialize(bytes).map_err(|e| Error::PsbtError(format!("{:?}", e)))?;
+        let psbt = Psbt::deserialize(bytes).map_err(|e| Error::PsbtError(format!("{e:?}")))?;
         Ok(Self { psbt })
     }
 

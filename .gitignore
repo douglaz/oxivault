@@ -1,1 +1,4 @@
 /target
+
+# Local files (not for version control)
+*.local.*

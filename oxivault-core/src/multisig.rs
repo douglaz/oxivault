@@ -123,14 +123,14 @@ impl MultisigConfig {
         // Convert to address based on script type
         match self.script_type {
             MultisigScriptType::P2sh => Address::p2sh(&script, self.network).map_err(|e| {
-                Error::BitcoinError(format!("Failed to create P2SH address: {:?}", e))
+                Error::BitcoinError(format!("Failed to create P2SH address: {e:?}"))
             }),
             MultisigScriptType::P2shP2wsh => {
                 // Create P2WSH script first, then wrap in P2SH
                 let witness_script = script;
                 let p2wsh = Address::p2wsh(&witness_script, self.network);
                 Address::p2sh(&p2wsh.script_pubkey(), self.network).map_err(|e| {
-                    Error::BitcoinError(format!("Failed to create P2SH-P2WSH address: {:?}", e))
+                    Error::BitcoinError(format!("Failed to create P2SH-P2WSH address: {e:?}"))
                 })
             }
             MultisigScriptType::P2wsh => Ok(Address::p2wsh(&script, self.network)),
@@ -416,10 +416,10 @@ mod tests {
     use bitcoin::bip32::ExtendedPrivKey;
 
     #[test]
-    fn test_multisig_config() {
+    fn test_multisig_config() -> Result<()> {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-        ).unwrap();
+        )?;
 
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
@@ -445,21 +445,23 @@ mod tests {
             Network::Bitcoin,
             MultisigScriptType::P2wsh,
         )
-        .unwrap();
+        ?;
 
         assert_eq!(config.threshold, 2);
         assert_eq!(config.total, 2);
 
         // Test address derivation
-        let address = config.derive_address(0, 0).unwrap();
+        let address = config.derive_address(0, 0)?;
         assert!(address.to_string().starts_with("bc1"));
+        
+        Ok(())
     }
 
     #[test]
-    fn test_multisig_builder() {
+    fn test_multisig_builder() -> Result<()> {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-        ).unwrap();
+        )?;
 
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
@@ -488,18 +490,20 @@ mod tests {
             .network(Network::Bitcoin)
             .script_type(MultisigScriptType::P2wsh)
             .build()
-            .unwrap();
+            ?;
 
         assert_eq!(config.threshold, 2);
         assert_eq!(config.total, 3);
         assert_eq!(config.cosigners.len(), 3);
+        
+        Ok(())
     }
 
     #[test]
-    fn test_descriptor_generation() {
+    fn test_descriptor_generation() -> Result<()> {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-        ).unwrap();
+        )?;
 
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
@@ -511,22 +515,24 @@ mod tests {
                 "Alice".to_string(),
                 fingerprint,
                 xpub.clone(),
-                DerivationPath::from_str("m/48'/0'/0'/2'").unwrap(),
+                DerivationPath::from_str("m/48'/0'/0'/2'")?,
             )
             .add_cosigner(
                 "Bob".to_string(),
                 fingerprint,
                 xpub,
-                DerivationPath::from_str("m/48'/0'/0'/2'").unwrap(),
+                DerivationPath::from_str("m/48'/0'/0'/2'")?,
             )
             .network(Network::Bitcoin)
             .script_type(MultisigScriptType::P2wsh)
             .build()
-            .unwrap();
+            ?;
 
         let descriptor = config.descriptor();
         assert!(descriptor.starts_with("wsh(multi(2,"));
         assert!(descriptor.contains("/<0;1>/*"));
+        
+        Ok(())
     }
 
     use core::str::FromStr;

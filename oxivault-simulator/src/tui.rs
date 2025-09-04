@@ -293,7 +293,7 @@ impl App {
             let mut lines = vec![Line::from("Your mnemonic phrase:"), Line::from("")];
 
             for (i, word) in words.iter().enumerate() {
-                lines.push(Line::from(format!("{:2}. {}", i + 1, word)));
+                lines.push(Line::from(format!("{:2}. {word}", i + 1)));
             }
 
             lines.push(Line::from(""));
@@ -512,7 +512,7 @@ impl App {
                         self.screen = Screen::ShowMnemonic;
                     }
                     Err(e) => {
-                        self.status = format!("Error: {:?}", e);
+                        self.status = format!("Error: {e:?}");
                     }
                 }
             }
@@ -565,7 +565,7 @@ impl App {
                                 match wallet.get_address(script_type, 0, 0, i) {
                                     Ok(addr) => self.addresses.push(addr.to_string()),
                                     Err(e) => {
-                                        self.status = format!("Error deriving address: {:?}", e);
+                                        self.status = format!("Error deriving address: {e:?}");
                                         return;
                                     }
                                 }
@@ -582,7 +582,7 @@ impl App {
                             self.screen = Screen::ShowAddresses;
                         }
                         Err(e) => {
-                            self.status = format!("Error creating wallet: {:?}", e);
+                            self.status = format!("Error creating wallet: {e:?}");
                         }
                     }
                 }
@@ -911,7 +911,7 @@ impl App {
                                             vout: i.previous_vout,
                                             value: i.value,
                                             signed: i.is_signed,
-                                            script_type: format!("{:?}", i.script_type),
+                                            script_type: format!("{script_type:?}", script_type = i.script_type),
                                         })
                                         .collect();
 
@@ -948,12 +948,12 @@ impl App {
                                     self.input.clear();
                                 }
                                 Err(e) => {
-                                    self.status = format!("Failed to analyze PSBT: {:?}", e);
+                                    self.status = format!("Failed to analyze PSBT: {e:?}");
                                 }
                             }
                         }
                         Err(e) => {
-                            self.status = format!("Invalid PSBT: {:?}", e);
+                            self.status = format!("Invalid PSBT: {e:?}");
                         }
                     }
                 }
