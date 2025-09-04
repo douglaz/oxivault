@@ -911,7 +911,10 @@ impl App {
                                             vout: i.previous_vout,
                                             value: i.value,
                                             signed: i.is_signed,
-                                            script_type: format!("{script_type:?}", script_type = i.script_type),
+                                            script_type: format!(
+                                                "{script_type:?}",
+                                                script_type = i.script_type
+                                            ),
                                         })
                                         .collect();
 

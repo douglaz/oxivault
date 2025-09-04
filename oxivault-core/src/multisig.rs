@@ -122,9 +122,8 @@ impl MultisigConfig {
 
         // Convert to address based on script type
         match self.script_type {
-            MultisigScriptType::P2sh => Address::p2sh(&script, self.network).map_err(|e| {
-                Error::BitcoinError(format!("Failed to create P2SH address: {e:?}"))
-            }),
+            MultisigScriptType::P2sh => Address::p2sh(&script, self.network)
+                .map_err(|e| Error::BitcoinError(format!("Failed to create P2SH address: {e:?}"))),
             MultisigScriptType::P2shP2wsh => {
                 // Create P2WSH script first, then wrap in P2SH
                 let witness_script = script;
@@ -444,8 +443,7 @@ mod tests {
             vec![cosigner1, cosigner2],
             Network::Bitcoin,
             MultisigScriptType::P2wsh,
-        )
-        ?;
+        )?;
 
         assert_eq!(config.threshold, 2);
         assert_eq!(config.total, 2);
@@ -453,7 +451,7 @@ mod tests {
         // Test address derivation
         let address = config.derive_address(0, 0)?;
         assert!(address.to_string().starts_with("bc1"));
-        
+
         Ok(())
     }
 
@@ -489,13 +487,12 @@ mod tests {
             )
             .network(Network::Bitcoin)
             .script_type(MultisigScriptType::P2wsh)
-            .build()
-            ?;
+            .build()?;
 
         assert_eq!(config.threshold, 2);
         assert_eq!(config.total, 3);
         assert_eq!(config.cosigners.len(), 3);
-        
+
         Ok(())
     }
 
@@ -525,13 +522,12 @@ mod tests {
             )
             .network(Network::Bitcoin)
             .script_type(MultisigScriptType::P2wsh)
-            .build()
-            ?;
+            .build()?;
 
         let descriptor = config.descriptor();
         assert!(descriptor.starts_with("wsh(multi(2,"));
         assert!(descriptor.contains("/<0;1>/*"));
-        
+
         Ok(())
     }
 
