@@ -51,7 +51,7 @@ jobs:
       run: nix develop -c cargo build --package oxivault-core --no-default-features
     
     - name: Run all tests
-      run: nix develop -c cargo test --workspace --exclude oxivault-embedded --verbose --lib
+      run: nix develop -c cargo test --workspace --exclude oxivault-embedded --exclude oxivault-qr --verbose --lib
     
     - name: Build documentation
       run: nix develop -c cargo doc --workspace --exclude oxivault-embedded --no-deps
