@@ -1,4 +1,4 @@
-//! IronVault nRF52840 Example Firmware
+//! OxiVault nRF52840 Example Firmware
 //! 
 //! Demonstrates a basic hardware wallet on nRF52840 development board
 
@@ -11,8 +11,8 @@ use embassy_time::Timer;
 use defmt::*;
 use defmt_rtt as _; // global logger
 use panic_probe as _;
-use ironvault_core::{Network, wallet::ScriptType};
-use ironvault_embedded::{ButtonEvent, HardwareWallet, WalletState, WalletStateMachine};
+use oxivault_core::{Network, wallet::ScriptType};
+use oxivault_embedded::{ButtonEvent, HardwareWallet, WalletState, WalletStateMachine};
 use heapless::{Vec, String};
 
 /// Mock hardware implementation for demo
@@ -93,7 +93,7 @@ impl HardwareWallet for Nrf52Hardware {
 async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
     
-    info!("IronVault nRF52840 Demo Starting");
+    info!("OxiVault nRF52840 Demo Starting");
     info!("================================");
     
     // Initialize hardware

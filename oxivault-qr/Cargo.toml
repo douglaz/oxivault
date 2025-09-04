@@ -1,0 +1,18 @@
+[package]
+name = "oxivault-qr"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+qrcode = { workspace = true }
+heapless = { workspace = true }
+sha2 = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+
+[lib]
+name = "oxivault_qr"

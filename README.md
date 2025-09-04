@@ -1,4 +1,4 @@
-# IronVault - Next-Generation Rust Hardware Wallet
+# OxiVault - Next-Generation Rust Hardware Wallet
 
 A modern, secure, and efficient Bitcoin hardware wallet implementation in Rust, designed to compete with and surpass existing Python-based solutions like Krux and SeedSigner.
 
@@ -8,7 +8,7 @@ A modern, secure, and efficient Bitcoin hardware wallet implementation in Rust, 
 
 ## 🎯 Vision
 
-IronVault aims to revolutionize the hardware wallet ecosystem by leveraging Rust's memory safety, performance, and embedded capabilities to create a truly secure and efficient Bitcoin signing device that can run on affordable hardware while providing enterprise-grade security.
+OxiVault aims to revolutionize the hardware wallet ecosystem by leveraging Rust's memory safety, performance, and embedded capabilities to create a truly secure and efficient Bitcoin signing device that can run on affordable hardware while providing enterprise-grade security.
 
 ## ✨ What's New (December 2024)
 
@@ -40,19 +40,19 @@ IronVault aims to revolutionize the hardware wallet ecosystem by leveraging Rust
 ## 🏗️ Architecture
 
 ```
-ironvault/
-├── ironvault-core/       # Core Bitcoin logic (no_std)
-├── ironvault-embedded/   # Embassy-rs firmware
-├── ironvault-qr/         # QR code generation/parsing
-└── ironvault-simulator/  # Desktop simulator
+oxivault/
+├── oxivault-core/       # Core Bitcoin logic (no_std)
+├── oxivault-embedded/   # Embassy-rs firmware
+├── oxivault-qr/         # QR code generation/parsing
+└── oxivault-simulator/  # Desktop simulator
 ```
 
 ### Crate Descriptions
 
-- **ironvault-core**: Pure Rust Bitcoin primitives, BIP implementations, PSBT handling. Fully no_std compatible for embedded use.
-- **ironvault-embedded**: Hardware abstraction using Embassy-rs, supporting multiple MCU platforms with async runtime.
-- **ironvault-qr**: QR code handling including BBQr format for efficient PSBT transfer.
-- **ironvault-simulator**: Desktop application for testing and development without hardware.
+- **oxivault-core**: Pure Rust Bitcoin primitives, BIP implementations, PSBT handling. Fully no_std compatible for embedded use.
+- **oxivault-embedded**: Hardware abstraction using Embassy-rs, supporting multiple MCU platforms with async runtime.
+- **oxivault-qr**: QR code handling including BBQr format for efficient PSBT transfer.
+- **oxivault-simulator**: Desktop application for testing and development without hardware.
 
 ## 🎮 Supported Hardware
 
@@ -119,20 +119,20 @@ ironvault/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ironvault
-cd ironvault
+git clone https://github.com/yourusername/oxivault
+cd oxivault
 
 # Run the simulator
-cargo run -p ironvault-simulator --bin ironvault-sim
+cargo run -p oxivault-simulator --bin oxivault-sim
 
 # Generate a new wallet
-cargo run -p ironvault-simulator --bin ironvault-sim -- generate --words 24
+cargo run -p oxivault-simulator --bin oxivault-sim -- generate --words 24
 
 # Derive addresses
-cargo run -p ironvault-simulator --bin ironvault-sim -- derive --script-type native-segwit --count 5
+cargo run -p oxivault-simulator --bin oxivault-sim -- derive --script-type native-segwit --count 5
 
 # Validate a mnemonic
-cargo run -p ironvault-simulator --bin ironvault-sim -- validate "your twelve word mnemonic phrase here"
+cargo run -p oxivault-simulator --bin oxivault-sim -- validate "your twelve word mnemonic phrase here"
 ```
 
 ## 🔧 Development
@@ -155,13 +155,13 @@ cargo install cargo-embed
 
 ```bash
 # Build core library
-cargo build -p ironvault-core --no-default-features
+cargo build -p oxivault-core --no-default-features
 
 # Build simulator
-cargo build -p ironvault-simulator
+cargo build -p oxivault-simulator
 
 # Build for nRF52840
-cargo build -p ironvault-embedded --features nrf52840 --target thumbv7em-none-eabihf
+cargo build -p oxivault-embedded --features nrf52840 --target thumbv7em-none-eabihf
 
 # Run tests
 cargo test --all
@@ -170,7 +170,7 @@ cargo test --all
 ### Running the Simulator
 
 ```bash
-cargo run -p ironvault-simulator
+cargo run -p oxivault-simulator
 ```
 
 ## 🔒 Security Model
@@ -183,7 +183,7 @@ cargo run -p ironvault-simulator
 
 ## 🤝 Comparison with Existing Projects
 
-| Feature | IronVault | Krux | SeedSigner | Specter-DIY |
+| Feature | OxiVault | Krux | SeedSigner | Specter-DIY |
 |---------|-----------|------|------------|-------------|
 | Language | Rust | Python | Python | MicroPython |
 | Binary Size | ~200KB | ~2MB | ~5MB | ~1MB |
@@ -231,4 +231,4 @@ This is experimental software. Do not use for real funds until audited. The auth
 
 ---
 
-**IronVault** - Forging the future of Bitcoin hardware wallets with Rust 🦀
+**OxiVault** - Forging the future of Bitcoin hardware wallets with Rust 🦀

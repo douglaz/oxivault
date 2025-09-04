@@ -1,11 +1,11 @@
-# IronVault API Documentation
+# OxiVault API Documentation
 
-## Core Library (`ironvault-core`)
+## Core Library (`oxivault-core`)
 
 ### Wallet Management
 
 ```rust
-use ironvault_core::{
+use oxivault_core::{
     wallet::{Wallet, ScriptType},
     Network,
 };
@@ -29,7 +29,7 @@ let address = wallet.get_address(
 ### Mnemonic Generation
 
 ```rust
-use ironvault_core::bip39::MnemonicManager;
+use oxivault_core::bip39::MnemonicManager;
 
 // Generate new mnemonic
 let mnemonic = MnemonicManager::generate(24)?;
@@ -44,7 +44,7 @@ if MnemonicManager::validate("word1 word2 ...") {
 ### PSBT Signing
 
 ```rust
-use ironvault_core::psbt::PsbtSigner;
+use oxivault_core::psbt::PsbtSigner;
 use bitcoin::psbt::Psbt;
 
 let psbt_bytes = base64::decode("cHNidP8B...")?;
@@ -58,7 +58,7 @@ signer.sign_psbt(&mut psbt)?;
 ### Multisig Coordination
 
 ```rust
-use ironvault_core::multisig::{MultisigBuilder, MultisigScriptType};
+use oxivault_core::multisig::{MultisigBuilder, MultisigScriptType};
 
 let config = MultisigBuilder::new()
     .threshold(2)
@@ -76,7 +76,7 @@ let address = config.derive_address(0, 0)?;
 ### Taproot Support
 
 ```rust
-use ironvault_core::taproot::TaprootKey;
+use oxivault_core::taproot::TaprootKey;
 use bitcoin::secp256k1::SecretKey;
 
 let secret = SecretKey::from_slice(&[0x01; 32])?;
@@ -95,7 +95,7 @@ let (address, spend_info) = taproot_key.address_with_scripts(vec![
 ### Miniscript Policies
 
 ```rust
-use ironvault_core::miniscript::{PolicyBuilder, MiniscriptCompiler};
+use oxivault_core::miniscript::{PolicyBuilder, MiniscriptCompiler};
 
 // 2-of-3 multisig
 let policy = PolicyBuilder::multisig_2_of_3(pk1, pk2, pk3);
@@ -111,7 +111,7 @@ let script = MiniscriptCompiler::to_script(&miniscript)?;
 ### SLIP-39 Shamir Backup
 
 ```rust
-use ironvault_core::slip39::{Slip39, ShareConfig};
+use oxivault_core::slip39::{Slip39, ShareConfig};
 
 // Split secret into shares
 let config = ShareConfig {
@@ -129,7 +129,7 @@ let secret = Slip39::combine_shares(&[share1, share2])?;
 ### Encrypted Backup
 
 ```rust
-use ironvault_core::backup::{BackupManager, BackupMetadata};
+use oxivault_core::backup::{BackupManager, BackupMetadata};
 
 let mut manager = BackupManager::new();
 
@@ -144,12 +144,12 @@ let backup = manager.create_backup(
 let restored = manager.restore_backup(&backup, "strong_passphrase")?;
 ```
 
-## Embedded Library (`ironvault-embedded`)
+## Embedded Library (`oxivault-embedded`)
 
 ### Hardware Abstraction
 
 ```rust
-use ironvault_embedded::{HardwareWallet, ButtonEvent};
+use oxivault_embedded::{HardwareWallet, ButtonEvent};
 
 #[derive(Clone)]
 struct MyHardware;
@@ -176,7 +176,7 @@ impl HardwareWallet for MyHardware {
 ### Display Driver
 
 ```rust
-use ironvault_embedded::drivers::ssd1306::{Ssd1306, I2cInterface};
+use oxivault_embedded::drivers::ssd1306::{Ssd1306, I2cInterface};
 
 // Initialize display
 let i2c_interface = I2cInterface::new(i2c_bus, 0x3C);
@@ -184,14 +184,14 @@ let mut display = Ssd1306::new(i2c_interface, Rotation::Rotate0);
 display.init().await?;
 
 // Draw text
-display.draw_text("IronVault", 10, 10, TextSize::Large);
+display.draw_text("OxiVault", 10, 10, TextSize::Large);
 display.flush().await?;
 ```
 
 ## HWI Protocol
 
 ```rust
-use ironvault_core::hwi::{HwiProtocol, HwiCommand};
+use oxivault_core::hwi::{HwiProtocol, HwiCommand};
 
 let mut protocol = HwiProtocol::new(fingerprint, network);
 

@@ -46,7 +46,7 @@ jobs:
         run: cargo test --all --verbose
       
       - name: Build no_std
-        run: cargo build --package ironvault-core --no-default-features
+        run: cargo build --package oxivault-core --no-default-features
   
   fmt:
     name: Rustfmt
@@ -122,7 +122,7 @@ jobs:
             ${{ runner.os }}-cargo-embedded-
       
       - name: Build for nRF52840
-        run: cargo build --package ironvault-embedded --no-default-features --features nrf52840 --target thumbv7em-none-eabihf
+        run: cargo build --package oxivault-embedded --no-default-features --features nrf52840 --target thumbv7em-none-eabihf
   
   release:
     name: Release Build
@@ -135,16 +135,16 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       
       - name: Build release
-        run: cargo build --release --package ironvault-simulator
+        run: cargo build --release --package oxivault-simulator
       
       - name: Check binary size
         run: |
-          SIZE=$(ls -lh target/release/ironvault-sim | awk '{print $5}')
+          SIZE=$(ls -lh target/release/oxivault-sim | awk '{print $5}')
           echo "Binary size: $SIZE"
           echo "::notice title=Binary Size::Release binary size is $SIZE"
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ironvault-sim
-          path: target/release/ironvault-sim
+          name: oxivault-sim
+          path: target/release/oxivault-sim

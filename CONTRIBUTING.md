@@ -1,6 +1,6 @@
-# Contributing to IronVault
+# Contributing to OxiVault
 
-Thank you for your interest in contributing to IronVault! This guide will help you get started.
+Thank you for your interest in contributing to OxiVault! This guide will help you get started.
 
 ## Code of Conduct
 
@@ -28,8 +28,8 @@ We are committed to providing a welcoming and inclusive environment. Please be r
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ironvault
-cd ironvault
+git clone https://github.com/yourusername/oxivault
+cd oxivault
 
 # Install development tools
 rustup component add rustfmt clippy
@@ -64,7 +64,7 @@ cargo test --all
    cargo test --all
    
    # Check no_std compatibility
-   cargo build --package ironvault-core --no-default-features
+   cargo build --package oxivault-core --no-default-features
    ```
 
 5. **Commit your changes**
@@ -229,7 +229,7 @@ cargo bench --all
 
 ```bash
 cargo build --release
-perf record --call-graph=dwarf target/release/ironvault-sim
+perf record --call-graph=dwarf target/release/oxivault-sim
 perf report
 ```
 
@@ -245,9 +245,9 @@ cargo embed --release --chip nRF52840_xxAA
 
 ### Getting Help
 
-- Discord: [discord.gg/ironvault](https://discord.gg/ironvault)
-- GitHub Discussions: [github.com/yourusername/ironvault/discussions](https://github.com/yourusername/ironvault/discussions)
-- Email: ironvault@example.com
+- Discord: [discord.gg/oxivault](https://discord.gg/oxivault)
+- GitHub Discussions: [github.com/yourusername/oxivault/discussions](https://github.com/yourusername/oxivault/discussions)
+- Email: oxivault@example.com
 
 ### License
 
@@ -255,4 +255,4 @@ By contributing, you agree that your contributions will be dual-licensed under M
 
 ---
 
-Thank you for contributing to IronVault! 🦀
+Thank you for contributing to OxiVault! 🦀

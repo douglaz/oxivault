@@ -1,6 +1,6 @@
-# nRF52840 IronVault Demo
+# nRF52840 OxiVault Demo
 
-This example demonstrates running IronVault on an nRF52840 development board.
+This example demonstrates running OxiVault on an nRF52840 development board.
 
 ## Hardware Requirements
 

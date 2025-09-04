@@ -1,6 +1,6 @@
-# IronVault Quick Start Guide
+# OxiVault Quick Start Guide
 
-Welcome to IronVault! This guide will help you get started with the next-generation Rust hardware wallet.
+Welcome to OxiVault! This guide will help you get started with the next-generation Rust hardware wallet.
 
 ## Table of Contents
 
@@ -23,53 +23,53 @@ Welcome to IronVault! This guide will help you get started with the next-generat
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ironvault
-cd ironvault
+git clone https://github.com/yourusername/oxivault
+cd oxivault
 
 # Build the project
 cargo build --release
 
 # The simulator binary will be at:
-# target/release/ironvault-sim
+# target/release/oxivault-sim
 ```
 
 ### Quick Install
 
 ```bash
 # Install directly with cargo
-cargo install --git https://github.com/yourusername/ironvault ironvault-simulator
+cargo install --git https://github.com/yourusername/oxivault oxivault-simulator
 
 # Or download pre-built binaries from releases page
 ```
 
 ## Desktop Simulator
 
-The desktop simulator allows you to test all IronVault features without hardware.
+The desktop simulator allows you to test all OxiVault features without hardware.
 
 ### Running the Simulator
 
 ```bash
 # Run with default settings
-ironvault-sim
+oxivault-sim
 
 # Or use cargo run
-cargo run --release -p ironvault-simulator --bin ironvault-sim
+cargo run --release -p oxivault-simulator --bin oxivault-sim
 ```
 
 ### Available Commands
 
 ```bash
 # Generate a new mnemonic (12 or 24 words)
-ironvault-sim generate --words 24
+oxivault-sim generate --words 24
 
 # Validate a mnemonic
-ironvault-sim validate "your twelve word mnemonic phrase here"
+oxivault-sim validate "your twelve word mnemonic phrase here"
 
 # Derive addresses
-ironvault-sim derive --script-type native-segwit --count 10
+oxivault-sim derive --script-type native-segwit --count 10
 
 # Show help
-ironvault-sim --help
+oxivault-sim --help
 ```
 
 ## Basic Operations
@@ -78,7 +78,7 @@ ironvault-sim --help
 
 ```bash
 # Generate a 24-word mnemonic (recommended)
-$ ironvault-sim generate --words 24
+$ oxivault-sim generate --words 24
 
 Generated 24 word mnemonic:
 word1 word2 word3 ... word24
@@ -91,7 +91,7 @@ word1 word2 word3 ... word24
 
 ```bash
 # Derive first 5 native segwit addresses
-$ echo "your mnemonic here" | ironvault-sim derive --script-type native-segwit --count 5
+$ echo "your mnemonic here" | oxivault-sim derive --script-type native-segwit --count 5
 
 Deriving 5 addresses for native-segwit
 Network: Bitcoin Mainnet
@@ -106,26 +106,26 @@ m/84'/0'/0'/0/4: bc1q...
 
 ### 3. Address Types
 
-IronVault supports all modern Bitcoin address types:
+OxiVault supports all modern Bitcoin address types:
 
 - **Legacy (P2PKH)**: Starts with `1`
   ```bash
-  ironvault-sim derive --script-type legacy
+  oxivault-sim derive --script-type legacy
   ```
 
 - **Nested SegWit (P2SH-P2WPKH)**: Starts with `3`
   ```bash
-  ironvault-sim derive --script-type nested-segwit
+  oxivault-sim derive --script-type nested-segwit
   ```
 
 - **Native SegWit (P2WPKH)**: Starts with `bc1q`
   ```bash
-  ironvault-sim derive --script-type native-segwit
+  oxivault-sim derive --script-type native-segwit
   ```
 
 - **Taproot (P2TR)**: Starts with `bc1p`
   ```bash
-  ironvault-sim derive --script-type taproot
+  oxivault-sim derive --script-type taproot
   ```
 
 ## Hardware Setup
@@ -148,7 +148,7 @@ IronVault supports all modern Bitcoin address types:
 rustup target add thumbv7em-none-eabihf
 
 # Build for nRF52840
-cargo build --release --package ironvault-embedded \
+cargo build --release --package oxivault-embedded \
   --no-default-features --features nrf52840 \
   --target thumbv7em-none-eabihf
 
@@ -170,7 +170,7 @@ cargo embed --release --chip nRF52840_xxAA
 
 ### Multisig Wallets
 
-IronVault supports multisig configurations up to 15-of-15:
+OxiVault supports multisig configurations up to 15-of-15:
 
 ```rust
 // Example: 2-of-3 multisig
@@ -237,9 +237,9 @@ lto = "fat"
 
 ### Getting Help
 
-- GitHub Issues: [github.com/yourusername/ironvault/issues](https://github.com/yourusername/ironvault/issues)
-- Documentation: [docs.rs/ironvault](https://docs.rs/ironvault)
-- Discord: [discord.gg/ironvault](https://discord.gg/ironvault)
+- GitHub Issues: [github.com/yourusername/oxivault/issues](https://github.com/yourusername/oxivault/issues)
+- Documentation: [docs.rs/oxivault](https://docs.rs/oxivault)
+- Discord: [discord.gg/oxivault](https://discord.gg/oxivault)
 
 ## Security Notes
 
@@ -256,8 +256,8 @@ lto = "fat"
 - Read the [full documentation](./docs/README.md)
 - Explore [API documentation](./docs/API.md)
 - Check out [examples](./examples/)
-- Contribute on [GitHub](https://github.com/yourusername/ironvault)
+- Contribute on [GitHub](https://github.com/yourusername/oxivault)
 
 ---
 
-IronVault - Forging the future of Bitcoin hardware wallets with Rust 🦀
+OxiVault - Forging the future of Bitcoin hardware wallets with Rust 🦀

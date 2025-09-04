@@ -1,6 +1,6 @@
-//! Integration tests for IronVault project
+//! Integration tests for OxiVault project
 
-use ironvault_core::{
+use oxivault_core::{
     bip39::MnemonicManager,
     wallet::{Wallet, ScriptType},
     Network,

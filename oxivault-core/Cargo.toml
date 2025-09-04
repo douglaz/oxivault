@@ -1,0 +1,31 @@
+[package]
+name = "oxivault-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+bitcoin = { workspace = true }
+secp256k1 = { workspace = true }
+bip39 = { workspace = true }
+sha2 = { workspace = true }
+ripemd = { workspace = true }
+heapless = { workspace = true }
+zeroize = { workspace = true }
+subtle = { workspace = true }
+serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"], optional = true }
+rand = { version = "0.8", optional = true }
+libc = { version = "0.2", optional = true }
+hex = { version = "0.4", default-features = false }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+hmac = { version = "0.12", default-features = false }
+
+[features]
+default = ["std"]
+std = ["bitcoin/std", "secp256k1/std", "bip39/std", "sha2/std", "rand", "libc", "serde"]
+serde = ["dep:serde", "dep:serde_json", "bitcoin/serde"]
+
+[lib]
+name = "oxivault_core"

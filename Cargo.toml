@@ -1,18 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-    "ironvault-core",
-    "ironvault-embedded", 
-    "ironvault-simulator",
-    "ironvault-qr",
+    "oxivault-core",
+    "oxivault-embedded", 
+    "oxivault-simulator",
+    "oxivault-qr",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["IronVault Contributors"]
+authors = ["OxiVault Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/ironvault"
+repository = "https://github.com/yourusername/oxivault"
 
 [workspace.dependencies]
 # Bitcoin libraries

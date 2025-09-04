@@ -1,6 +1,6 @@
-//! Integration tests for IronVault
+//! Integration tests for OxiVault
 
-use ironvault_core::{
+use oxivault_core::{
     bip39::MnemonicManager,
     wallet::{Wallet, ScriptType},
     Network,
@@ -127,7 +127,7 @@ fn test_mnemonic_validation() {
 
 #[test]
 fn test_slip39_shares() {
-    use ironvault_core::slip39::{Slip39, ShareConfig};
+    use oxivault_core::slip39::{Slip39, ShareConfig};
     
     let secret = b"this is my secret seed phrase!!!"; // 32 bytes
     let config = ShareConfig {
@@ -151,7 +151,7 @@ fn test_slip39_shares() {
 
 #[test]
 fn test_multisig_coordinator() {
-    use ironvault_core::multisig::{MultisigBuilder, PsbtCoordinator};
+    use oxivault_core::multisig::{MultisigBuilder, PsbtCoordinator};
     use bitcoin::bip32::{ExtendedPrivKey, Fingerprint};
     use bitcoin::psbt::Psbt;
     
@@ -197,7 +197,7 @@ fn test_multisig_coordinator() {
 
 #[test] 
 fn test_taproot_key_generation() {
-    use ironvault_core::taproot::TaprootKey;
+    use oxivault_core::taproot::TaprootKey;
     use bitcoin::secp256k1::SecretKey;
     
     let secret = SecretKey::from_slice(&[0x01; 32]).unwrap();
