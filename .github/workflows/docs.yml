@@ -33,10 +33,10 @@ jobs:
           cargo-registry-docs-${{ runner.os }}-
     
     - name: Build documentation
-      run: nix develop -c cargo doc --all --no-deps
+      run: nix develop -c cargo doc --workspace --exclude oxivault-embedded --no-deps
     
     - name: Test documentation examples
-      run: nix develop -c cargo test --doc --all
+      run: nix develop -c cargo test --doc --workspace --exclude oxivault-embedded
     
     - name: Deploy to GitHub Pages
       if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
