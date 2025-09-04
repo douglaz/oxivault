@@ -35,20 +35,25 @@ if command -v nix >/dev/null 2>&1 && [ -f "flake.nix" ]; then
     echo "✅ Clippy check passed"
     echo ""
     
-    # Check for outdated dependencies (warning only)
+    # Check for outdated dependencies (skipped if cargo-outdated not available)
     echo "📦 Checking for outdated dependencies..."
-    if ! nix develop -c cargo outdated --exit-code 1 --root-deps-only 2>/dev/null; then
-        echo ""
-        echo "⚠️  Warning: Outdated dependencies detected:"
-        nix develop -c cargo outdated --root-deps-only 2>/dev/null | head -30
-        echo ""
-        echo "To update compatible versions:"
-        echo "  nix develop -c cargo upgrade"
-        echo ""
-        echo "For incompatible updates (major versions), review changelog and update manually."
-        echo "Consider updating dependencies when appropriate."
+    if command -v cargo-outdated >/dev/null 2>&1; then
+        if ! nix develop -c cargo outdated --exit-code 1 --root-deps-only 2>/dev/null; then
+            echo ""
+            echo "⚠️  Warning: Outdated dependencies detected:"
+            nix develop -c cargo outdated --root-deps-only 2>/dev/null | head -30
+            echo ""
+            echo "To update compatible versions:"
+            echo "  cargo install cargo-edit && cargo upgrade"
+            echo ""
+            echo "For incompatible updates (major versions), review changelog and update manually."
+            echo "Consider updating dependencies when appropriate."
+        else
+            echo "✅ All dependencies are up to date"
+        fi
     else
-        echo "✅ All dependencies are up to date"
+        echo "⚠️  cargo-outdated not installed. Skipping dependency check."
+        echo "   Install with: cargo install cargo-outdated"
     fi
 else
     # Fallback to regular cargo
