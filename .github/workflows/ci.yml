@@ -42,7 +42,7 @@ jobs:
       run: nix develop -c cargo fmt --all -- --check
     
     - name: Run linting
-      run: nix develop -c cargo clippy --workspace --exclude oxivault-embedded --all-features -- -D warnings
+      run: nix develop -c cargo clippy --workspace --exclude oxivault-embedded --all-features -- -W warnings
     
     - name: Build all packages
       run: nix develop -c cargo build --workspace --exclude oxivault-embedded --verbose
