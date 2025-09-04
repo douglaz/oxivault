@@ -1,16 +1,17 @@
 //! Real PSBT parsing and analysis
-//! 
+//!
 //! This module provides comprehensive PSBT parsing, analysis, and manipulation
 //! capabilities for hardware wallet operations.
 
 use crate::{Error, Result};
-use bitcoin::{
-    psbt::Psbt,
-    Address, Network, ScriptBuf,
-};
+use bitcoin::{psbt::Psbt, Address, Network, ScriptBuf};
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec::Vec, string::{String, ToString}, format};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 /// Comprehensive PSBT analysis
 #[derive(Debug, Clone)]
@@ -90,7 +91,7 @@ impl ScriptType {
             ScriptType::Unknown
         }
     }
-    
+
     /// Get human-readable name
     pub fn name(&self) -> &str {
         match self {
@@ -114,47 +115,48 @@ impl PsbtParser {
     pub fn new(network: Network) -> Self {
         Self { network }
     }
-    
+
     /// Parse PSBT from base64
     pub fn parse_base64(&self, base64_data: &str) -> Result<Psbt> {
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        
-        let bytes = STANDARD.decode(base64_data)
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        let bytes = STANDARD
+            .decode(base64_data)
             .map_err(|e| Error::InvalidParameter(format!("Invalid base64: {}", e)))?;
-        
+
         self.parse_bytes(&bytes)
     }
-    
+
     /// Parse PSBT from bytes
     pub fn parse_bytes(&self, data: &[u8]) -> Result<Psbt> {
         use bitcoin::psbt::Psbt;
         use core::str::from_utf8;
-        
+
         // Try to deserialize directly - PSBT has its own format
         // The bitcoin crate should handle this internally
         let psbt = bitcoin::psbt::Psbt::deserialize(data)
             .map_err(|e| Error::PsbtError(format!("Failed to parse PSBT: {:?}", e)))?;
-        
+
         Ok(psbt)
     }
-    
+
     /// Analyze a PSBT
     pub fn analyze(&self, psbt: &Psbt) -> Result<PsbtAnalysis> {
         let unsigned_tx = &psbt.unsigned_tx;
-        
+
         // Analyze inputs
         let mut inputs = Vec::new();
         let mut total_input_value = 0u64;
         let mut all_inputs_have_value = true;
         let mut signatures_present = 0;
         let mut signatures_required = 0;
-        
-        for (index, (tx_input, psbt_input)) in unsigned_tx.input.iter()
-            .zip(psbt.inputs.iter()).enumerate() {
-            
+
+        for (index, (tx_input, psbt_input)) in
+            unsigned_tx.input.iter().zip(psbt.inputs.iter()).enumerate()
+        {
             let previous_txid = tx_input.previous_output.txid.to_string();
             let previous_vout = tx_input.previous_output.vout;
-            
+
             // Get input value from witness_utxo or non_witness_utxo
             let value = if let Some(witness_utxo) = &psbt_input.witness_utxo {
                 Some(witness_utxo.value.to_sat())
@@ -169,11 +171,11 @@ impl PsbtParser {
                 all_inputs_have_value = false;
                 None
             };
-            
+
             if let Some(val) = value {
                 total_input_value += val;
             }
-            
+
             // Determine script type
             let script_type = if let Some(witness_utxo) = &psbt_input.witness_utxo {
                 ScriptType::from_script(&witness_utxo.script_pubkey)
@@ -186,17 +188,17 @@ impl PsbtParser {
             } else {
                 ScriptType::Unknown
             };
-            
+
             // Check if signed
-            let is_signed = !psbt_input.partial_sigs.is_empty() || 
-                           psbt_input.final_script_sig.is_some() ||
-                           psbt_input.final_script_witness.is_some();
-            
+            let is_signed = !psbt_input.partial_sigs.is_empty()
+                || psbt_input.final_script_sig.is_some()
+                || psbt_input.final_script_witness.is_some();
+
             if is_signed {
                 signatures_present += 1;
             }
             signatures_required += 1; // Simplified - would need to parse multisig
-            
+
             // Extract signatures
             let mut signatures = Vec::new();
             for (pubkey, sig) in &psbt_input.partial_sigs {
@@ -207,16 +209,19 @@ impl PsbtParser {
                     sighash_type: format!("{:?}", sig.sighash_type),
                 });
             }
-            
+
             // Extract derivation path if available
             let derivation_path = if !psbt_input.bip32_derivation.is_empty() {
                 // Get first derivation path
-                psbt_input.bip32_derivation.values().next()
+                psbt_input
+                    .bip32_derivation
+                    .values()
+                    .next()
                     .map(|(_, path)| path.to_string())
             } else {
                 None
             };
-            
+
             inputs.push(InputAnalysis {
                 index,
                 previous_txid,
@@ -229,36 +234,43 @@ impl PsbtParser {
                 is_mine: false, // Would need wallet context to determine
             });
         }
-        
+
         // Analyze outputs
         let mut outputs = Vec::new();
         let mut total_output_value = 0u64;
-        
-        for (index, (tx_output, psbt_output)) in unsigned_tx.output.iter()
-            .zip(psbt.outputs.iter()).enumerate() {
-            
+
+        for (index, (tx_output, psbt_output)) in unsigned_tx
+            .output
+            .iter()
+            .zip(psbt.outputs.iter())
+            .enumerate()
+        {
             total_output_value += tx_output.value.to_sat();
-            
+
             // Try to get address
             let address = Address::from_script(&tx_output.script_pubkey, self.network)
                 .map(|a| a.to_string())
                 .unwrap_or_else(|_| "Unknown".to_string());
-            
+
             let script_type = ScriptType::from_script(&tx_output.script_pubkey);
-            
+
             // Extract derivation path if available
             let derivation_path = if !psbt_output.bip32_derivation.is_empty() {
-                psbt_output.bip32_derivation.values().next()
+                psbt_output
+                    .bip32_derivation
+                    .values()
+                    .next()
                     .map(|(_, path)| path.to_string())
             } else {
                 None
             };
-            
+
             // Simple heuristic for change detection
-            let is_change = derivation_path.as_ref()
+            let is_change = derivation_path
+                .as_ref()
                 .map(|p| p.contains("/1/"))
                 .unwrap_or(false);
-            
+
             outputs.push(OutputAnalysis {
                 index,
                 address,
@@ -269,22 +281,25 @@ impl PsbtParser {
                 is_mine: false, // Would need wallet context
             });
         }
-        
+
         // Calculate fee if possible
         let fee = if all_inputs_have_value {
             Some(total_input_value.saturating_sub(total_output_value))
         } else {
             None
         };
-        
+
         // Check if transaction is fully signed
-        let is_complete = signatures_present == signatures_required &&
-                         signatures_required > 0;
-        
+        let is_complete = signatures_present == signatures_required && signatures_required > 0;
+
         Ok(PsbtAnalysis {
             inputs,
             outputs,
-            total_input_value: if all_inputs_have_value { Some(total_input_value) } else { None },
+            total_input_value: if all_inputs_have_value {
+                Some(total_input_value)
+            } else {
+                None
+            },
             total_output_value,
             fee,
             is_complete,
@@ -295,27 +310,31 @@ impl PsbtParser {
             locktime: unsigned_tx.lock_time.to_consensus_u32(),
         })
     }
-    
+
     /// Create a summary of the PSBT
     pub fn summarize(&self, analysis: &PsbtAnalysis) -> String {
         let mut summary = String::new();
-        
+
         summary.push_str(&format!("PSBT Analysis:\n"));
         summary.push_str(&format!("  Network: {:?}\n", analysis.network));
         summary.push_str(&format!("  Version: {}\n", analysis.version));
         summary.push_str(&format!("  Locktime: {}\n", analysis.locktime));
         summary.push_str(&format!("\nInputs: {}\n", analysis.inputs.len()));
-        
+
         for input in &analysis.inputs {
-            summary.push_str(&format!("  #{}: {}:{}\n", 
-                input.index, &input.previous_txid[..8], input.previous_vout));
+            summary.push_str(&format!(
+                "  #{}: {}:{}\n",
+                input.index,
+                &input.previous_txid[..8],
+                input.previous_vout
+            ));
             if let Some(value) = input.value {
                 summary.push_str(&format!("    Value: {} sats\n", value));
             }
             summary.push_str(&format!("    Type: {}\n", input.script_type.name()));
             summary.push_str(&format!("    Signed: {}\n", input.is_signed));
         }
-        
+
         summary.push_str(&format!("\nOutputs: {}\n", analysis.outputs.len()));
         for output in &analysis.outputs {
             summary.push_str(&format!("  #{}: {}\n", output.index, output.address));
@@ -325,25 +344,30 @@ impl PsbtParser {
                 summary.push_str("    (Change output)\n");
             }
         }
-        
+
         if let Some(total_in) = analysis.total_input_value {
             summary.push_str(&format!("\nTotal Input: {} sats\n", total_in));
         }
-        summary.push_str(&format!("Total Output: {} sats\n", analysis.total_output_value));
-        
+        summary.push_str(&format!(
+            "Total Output: {} sats\n",
+            analysis.total_output_value
+        ));
+
         if let Some(fee) = analysis.fee {
             summary.push_str(&format!("Fee: {} sats\n", fee));
-            
+
             // Calculate fee rate if we have transaction size estimate
             let estimated_vsize = 150 * analysis.inputs.len() + 34 * analysis.outputs.len() + 10;
             let fee_rate = fee as f64 / estimated_vsize as f64;
             summary.push_str(&format!("Est. Fee Rate: {:.1} sat/vB\n", fee_rate));
         }
-        
-        summary.push_str(&format!("\nSignatures: {}/{}\n", 
-            analysis.signatures_present, analysis.signatures_required));
+
+        summary.push_str(&format!(
+            "\nSignatures: {}/{}\n",
+            analysis.signatures_present, analysis.signatures_required
+        ));
         summary.push_str(&format!("Complete: {}\n", analysis.is_complete));
-        
+
         summary
     }
 }
@@ -353,28 +377,29 @@ pub fn validate_psbt_for_signing(psbt: &Psbt) -> Result<()> {
     // Check that we have UTXOs for all inputs
     for (i, input) in psbt.inputs.iter().enumerate() {
         if input.witness_utxo.is_none() && input.non_witness_utxo.is_none() {
-            return Err(Error::PsbtError(
-                format!("Missing UTXO information for input {}", i)
-            ));
+            return Err(Error::PsbtError(format!(
+                "Missing UTXO information for input {}",
+                i
+            )));
         }
     }
-    
+
     // Check that the transaction has inputs and outputs
     if psbt.unsigned_tx.input.is_empty() {
         return Err(Error::PsbtError("PSBT has no inputs".into()));
     }
-    
+
     if psbt.unsigned_tx.output.is_empty() {
         return Err(Error::PsbtError("PSBT has no outputs".into()));
     }
-    
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_script_type_detection() {
         // Test script type detection
@@ -382,12 +407,12 @@ mod tests {
         assert_eq!(ScriptType::P2WPKH.name(), "Native Segwit (P2WPKH)");
         assert_eq!(ScriptType::P2TR.name(), "Taproot (P2TR)");
     }
-    
+
     #[test]
     fn test_psbt_parser_creation() {
         let parser = PsbtParser::new(Network::Bitcoin);
         assert!(matches!(parser.network, Network::Bitcoin));
-        
+
         let parser_testnet = PsbtParser::new(Network::Testnet);
         assert!(matches!(parser_testnet.network, Network::Testnet));
     }

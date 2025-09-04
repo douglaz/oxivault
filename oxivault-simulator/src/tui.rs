@@ -1,6 +1,5 @@
 //! Terminal User Interface for OxiVault simulator
 
-use std::io;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
@@ -14,17 +13,15 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame, Terminal,
 };
+use std::io;
 
 use oxivault_core::{
     bip39::MnemonicManager,
-    wallet::{Wallet, ScriptType},
-    psbt_parser::{PsbtParser, PsbtAnalysis as CorePsbtAnalysis},
+    psbt_parser::{PsbtAnalysis as CorePsbtAnalysis, PsbtParser},
+    wallet::{ScriptType, Wallet},
     Network,
 };
-use oxivault_qr::{
-    QrGenerator, AsciiQrRenderer,
-    BBQrEncoder, FileType, EncodingType,
-};
+use oxivault_qr::{AsciiQrRenderer, BBQrEncoder, EncodingType, FileType, QrGenerator};
 
 /// Application state
 pub struct App {
@@ -185,15 +182,19 @@ impl App {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Min(10),    // Content
-                Constraint::Length(3),  // Status
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Content
+                Constraint::Length(3), // Status
             ])
             .split(f.area());
 
         // Title
         let title = Paragraph::new("OxiVault Hardware Wallet Simulator")
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         f.render_widget(title, chunks[0]);
@@ -240,7 +241,9 @@ impl App {
             .enumerate()
             .map(|(i, item)| {
                 let style = if i == self.selected_index {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -274,7 +277,11 @@ impl App {
         ];
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Generate Mnemonic"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Generate Mnemonic"),
+            )
             .wrap(Wrap { trim: true });
 
         f.render_widget(paragraph, area);
@@ -283,10 +290,7 @@ impl App {
     fn draw_show_mnemonic(&self, f: &mut Frame, area: Rect) {
         if let Some(mnemonic) = &self.mnemonic {
             let words: Vec<&str> = mnemonic.split_whitespace().collect();
-            let mut lines = vec![
-                Line::from("Your mnemonic phrase:"),
-                Line::from(""),
-            ];
+            let mut lines = vec![Line::from("Your mnemonic phrase:"), Line::from("")];
 
             for (i, word) in words.iter().enumerate() {
                 lines.push(Line::from(format!("{:2}. {}", i + 1, word)));
@@ -301,7 +305,11 @@ impl App {
             lines.push(Line::from("Press Enter to continue, ESC to go back"));
 
             let paragraph = Paragraph::new(lines)
-                .block(Block::default().borders(Borders::ALL).title("Mnemonic Generated"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Mnemonic Generated"),
+                )
                 .wrap(Wrap { trim: true });
 
             f.render_widget(paragraph, area);
@@ -313,7 +321,10 @@ impl App {
             Line::from("Select address type:"),
             Line::from(""),
             Line::from(if self.selected_index == 0 {
-                Span::styled("→ Native Segwit (bc1...)", Style::default().fg(Color::Yellow))
+                Span::styled(
+                    "→ Native Segwit (bc1...)",
+                    Style::default().fg(Color::Yellow),
+                )
             } else {
                 Span::raw("  Native Segwit (bc1...)")
             }),
@@ -332,17 +343,18 @@ impl App {
         ];
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Derive Addresses"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Derive Addresses"),
+            )
             .wrap(Wrap { trim: true });
 
         f.render_widget(paragraph, area);
     }
 
     fn draw_show_addresses(&self, f: &mut Frame, area: Rect) {
-        let mut lines = vec![
-            Line::from("Derived addresses:"),
-            Line::from(""),
-        ];
+        let mut lines = vec![Line::from("Derived addresses:"), Line::from("")];
 
         for (i, addr) in self.addresses.iter().enumerate() {
             lines.push(Line::from(format!("m/84'/0'/0'/0/{}: {}", i, addr)));
@@ -368,7 +380,11 @@ impl App {
         ];
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Import Mnemonic"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Import Mnemonic"),
+            )
             .wrap(Wrap { trim: true });
 
         f.render_widget(paragraph, area);
@@ -554,7 +570,8 @@ impl App {
                                     }
                                 }
                             }
-                            self.status = format!("Derived 5 {} addresses", 
+                            self.status = format!(
+                                "Derived 5 {} addresses",
                                 match script_type {
                                     ScriptType::NativeSegwit => "Native Segwit",
                                     ScriptType::Taproot => "Taproot",
@@ -659,7 +676,9 @@ impl App {
                     // Import from QR
                     self.input.clear();
                     self.screen = Screen::ImportQr;
-                    self.status = "Paste QR code data or BBQr part (Enter to process, ESC to cancel)".to_string();
+                    self.status =
+                        "Paste QR code data or BBQr part (Enter to process, ESC to cancel)"
+                            .to_string();
                 }
                 _ => {}
             },
@@ -717,10 +736,7 @@ impl App {
             },
         ];
 
-        let mut lines = vec![
-            Line::from("QR Code Operations:"),
-            Line::from(""),
-        ];
+        let mut lines = vec![Line::from("QR Code Operations:"), Line::from("")];
 
         for item in items {
             lines.push(Line::from(item));
@@ -730,7 +746,11 @@ impl App {
         lines.push(Line::from("Press Enter to select, ESC to go back"));
 
         let paragraph = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("QR Operations"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("QR Operations"),
+            )
             .wrap(Wrap { trim: true });
 
         f.render_widget(paragraph, area);
@@ -739,22 +759,26 @@ impl App {
     fn draw_show_qr(&self, f: &mut Frame, area: Rect) {
         if let Some(ref qr_display) = self.qr_display {
             let lines: Vec<Line> = qr_display.lines().map(|l| Line::from(l)).collect();
-            
+
             let paragraph = Paragraph::new(lines)
-                .block(Block::default().borders(Borders::ALL).title("QR Code Display"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("QR Code Display"),
+                )
                 .alignment(Alignment::Center);
 
             f.render_widget(paragraph, area);
 
             // Add instructions at the bottom
-            let instructions = Paragraph::new("Press Enter or ESC to go back")
-                .alignment(Alignment::Center);
-            
+            let instructions =
+                Paragraph::new("Press Enter or ESC to go back").alignment(Alignment::Center);
+
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
                 .split(area);
-            
+
             f.render_widget(instructions, chunks[1]);
         }
     }
@@ -762,13 +786,17 @@ impl App {
     fn draw_show_bbqr(&self, f: &mut Frame, area: Rect) {
         if !self.bbqr_parts.is_empty() && self.bbqr_index < self.bbqr_parts.len() {
             let part = &self.bbqr_parts[self.bbqr_index];
-            
+
             // Generate QR for current part
             if let Ok(qr) = QrGenerator::generate(part) {
                 let qr_display = AsciiQrRenderer::render_compact(&qr);
                 let lines: Vec<Line> = qr_display.lines().map(|l| Line::from(l)).collect();
-                
-                let title = format!("BBQr Part {}/{}", self.bbqr_index + 1, self.bbqr_parts.len());
+
+                let title = format!(
+                    "BBQr Part {}/{}",
+                    self.bbqr_index + 1,
+                    self.bbqr_parts.len()
+                );
                 let paragraph = Paragraph::new(lines)
                     .block(Block::default().borders(Borders::ALL).title(title))
                     .alignment(Alignment::Center);
@@ -776,21 +804,20 @@ impl App {
                 f.render_widget(paragraph, area);
 
                 // Add navigation instructions
-                let instructions = Paragraph::new(
-                    "Use ← → or Space to navigate parts, ESC to go back"
-                )
-                .alignment(Alignment::Center);
-                
+                let instructions =
+                    Paragraph::new("Use ← → or Space to navigate parts, ESC to go back")
+                        .alignment(Alignment::Center);
+
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
                     .split(area);
-                
+
                 f.render_widget(instructions, chunks[1]);
             }
         }
     }
-    
+
     fn handle_import_qr(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
@@ -818,7 +845,7 @@ impl App {
             _ => {}
         }
     }
-    
+
     fn handle_psbt_menu(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
@@ -859,7 +886,7 @@ impl App {
             _ => {}
         }
     }
-    
+
     fn handle_psbt_import(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
@@ -876,24 +903,28 @@ impl App {
                             match parser.analyze(&psbt) {
                                 Ok(analysis) => {
                                     // Convert to TUI analysis format
-                                    let inputs: Vec<InputInfo> = analysis.inputs.iter().map(|i| {
-                                        InputInfo {
+                                    let inputs: Vec<InputInfo> = analysis
+                                        .inputs
+                                        .iter()
+                                        .map(|i| InputInfo {
                                             txid: i.previous_txid.clone(),
                                             vout: i.previous_vout,
                                             value: i.value,
                                             signed: i.is_signed,
                                             script_type: format!("{:?}", i.script_type),
-                                        }
-                                    }).collect();
-                                    
-                                    let outputs: Vec<OutputInfo> = analysis.outputs.iter().map(|o| {
-                                        OutputInfo {
+                                        })
+                                        .collect();
+
+                                    let outputs: Vec<OutputInfo> = analysis
+                                        .outputs
+                                        .iter()
+                                        .map(|o| OutputInfo {
                                             address: o.address.clone(),
                                             value: o.value,
                                             is_change: o.is_change,
-                                        }
-                                    }).collect();
-                                    
+                                        })
+                                        .collect();
+
                                     self.psbt_analysis = Some(PsbtAnalysis {
                                         inputs,
                                         outputs,
@@ -904,14 +935,15 @@ impl App {
                                         signatures_needed: analysis.signatures_required,
                                         signatures_present: analysis.signatures_present,
                                     });
-                                    
+
                                     // Store raw PSBT bytes
-                                    use base64::{Engine as _, engine::general_purpose::STANDARD};
+                                    use base64::{engine::general_purpose::STANDARD, Engine as _};
                                     if let Ok(data) = STANDARD.decode(&self.input) {
                                         self.current_psbt = Some(data);
                                     }
-                                    
-                                    self.status = "PSBT imported and analyzed successfully".to_string();
+
+                                    self.status =
+                                        "PSBT imported and analyzed successfully".to_string();
                                     self.screen = Screen::PsbtMenu;
                                     self.input.clear();
                                 }
@@ -935,13 +967,13 @@ impl App {
             _ => {}
         }
     }
-    
+
     fn handle_psbt_inspector(&mut self, key: KeyCode) {
         if key == KeyCode::Esc {
             self.screen = Screen::PsbtMenu;
         }
     }
-    
+
     fn handle_psbt_sign(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
@@ -951,7 +983,7 @@ impl App {
                 if self.current_psbt.is_some() && self.mnemonic.is_some() {
                     // In a real implementation, this would sign the PSBT
                     self.status = "PSBT signed successfully (simulated)".to_string();
-                    
+
                     // Update analysis to show signed
                     if let Some(ref mut analysis) = self.psbt_analysis {
                         analysis.signatures_present = 1;
@@ -965,13 +997,16 @@ impl App {
             _ => {}
         }
     }
-    
+
     fn draw_import_qr(&self, f: &mut Frame, area: Rect) {
         let content = vec![
             Line::from("Import from QR Code"),
             Line::from(""),
             Line::from("Paste QR code data:"),
-            Line::from(Span::styled(&self.input, Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                &self.input,
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from(""),
             Line::from("Supported formats:"),
             Line::from("- BIP-39 Mnemonic words"),
@@ -980,14 +1015,14 @@ impl App {
             Line::from(""),
             Line::from("Press Enter to process, ESC to cancel"),
         ];
-        
+
         let paragraph = Paragraph::new(content)
             .block(Block::default().borders(Borders::ALL).title("QR Import"))
             .wrap(Wrap { trim: true });
-        
+
         f.render_widget(paragraph, area);
     }
-    
+
     fn draw_psbt_menu(&self, f: &mut Frame, area: Rect) {
         let items = vec![
             if self.selected_index == 0 {
@@ -1006,92 +1041,108 @@ impl App {
                 "  Sign PSBT"
             },
         ];
-        
-        let content: Vec<Line> = vec![
-            Line::from("PSBT Operations"),
-            Line::from(""),
-        ]
-        .into_iter()
-        .chain(items.iter().map(|&item| Line::from(item)))
-        .chain(vec![
-            Line::from(""),
-            Line::from("Press Enter to select, ESC to go back"),
-        ].into_iter())
-        .collect();
-        
+
+        let content: Vec<Line> = vec![Line::from("PSBT Operations"), Line::from("")]
+            .into_iter()
+            .chain(items.iter().map(|&item| Line::from(item)))
+            .chain(
+                vec![
+                    Line::from(""),
+                    Line::from("Press Enter to select, ESC to go back"),
+                ]
+                .into_iter(),
+            )
+            .collect();
+
         let paragraph = Paragraph::new(content)
             .block(Block::default().borders(Borders::ALL).title("PSBT Menu"))
             .wrap(Wrap { trim: true });
-        
+
         f.render_widget(paragraph, area);
     }
-    
+
     fn draw_psbt_import(&self, f: &mut Frame, area: Rect) {
         let content = vec![
             Line::from("Import PSBT"),
             Line::from(""),
             Line::from("Enter base64-encoded PSBT:"),
-            Line::from(Span::styled(&self.input, Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                &self.input,
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from(""),
             Line::from("Press Enter to import, ESC to cancel"),
         ];
-        
+
         let paragraph = Paragraph::new(content)
             .block(Block::default().borders(Borders::ALL).title("PSBT Import"))
             .wrap(Wrap { trim: true });
-        
+
         f.render_widget(paragraph, area);
     }
-    
+
     fn draw_psbt_inspector(&self, f: &mut Frame, area: Rect) {
-        let mut lines = vec![
-            Line::from("PSBT Inspector"),
-            Line::from(""),
-        ];
-        
+        let mut lines = vec![Line::from("PSBT Inspector"), Line::from("")];
+
         if let Some(ref analysis) = self.psbt_analysis {
-            lines.push(Line::from(format!("Total Input: {} sats", analysis.total_input)));
-            lines.push(Line::from(format!("Total Output: {} sats", analysis.total_output)));
+            lines.push(Line::from(format!(
+                "Total Input: {} sats",
+                analysis.total_input
+            )));
+            lines.push(Line::from(format!(
+                "Total Output: {} sats",
+                analysis.total_output
+            )));
             lines.push(Line::from(format!("Fee: {} sats", analysis.fee)));
-            lines.push(Line::from(format!("Complete: {}", if analysis.is_complete { "Yes" } else { "No" })));
-            lines.push(Line::from(format!("Signatures: {}/{}", 
-                analysis.signatures_present, analysis.signatures_needed)));
+            lines.push(Line::from(format!(
+                "Complete: {}",
+                if analysis.is_complete { "Yes" } else { "No" }
+            )));
+            lines.push(Line::from(format!(
+                "Signatures: {}/{}",
+                analysis.signatures_present, analysis.signatures_needed
+            )));
             lines.push(Line::from(""));
             lines.push(Line::from("Inputs:"));
-            
+
             for (i, input) in analysis.inputs.iter().enumerate() {
                 let value_str = input.value.map_or("unknown".to_string(), |v| v.to_string());
-                lines.push(Line::from(format!("  #{}: {} ({} sats)", 
-                    i, input.script_type, value_str)));
+                lines.push(Line::from(format!(
+                    "  #{}: {} ({} sats)",
+                    i, input.script_type, value_str
+                )));
             }
-            
+
             lines.push(Line::from(""));
             lines.push(Line::from("Outputs:"));
-            
+
             for (i, output) in analysis.outputs.iter().enumerate() {
-                lines.push(Line::from(format!("  #{}: {} ({} sats)", 
-                    i, output.address, output.value)));
+                lines.push(Line::from(format!(
+                    "  #{}: {} ({} sats)",
+                    i, output.address, output.value
+                )));
             }
         } else {
             lines.push(Line::from("No PSBT loaded"));
         }
-        
+
         lines.push(Line::from(""));
         lines.push(Line::from("Press ESC to go back"));
-        
+
         let paragraph = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("PSBT Inspector"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("PSBT Inspector"),
+            )
             .wrap(Wrap { trim: true });
-        
+
         f.render_widget(paragraph, area);
     }
-    
+
     fn draw_psbt_sign(&self, f: &mut Frame, area: Rect) {
-        let mut lines = vec![
-            Line::from("Sign PSBT"),
-            Line::from(""),
-        ];
-        
+        let mut lines = vec![Line::from("Sign PSBT"), Line::from("")];
+
         if self.current_psbt.is_some() {
             if self.mnemonic.is_some() {
                 lines.push(Line::from("Ready to sign transaction"));
@@ -1099,8 +1150,8 @@ impl App {
                 lines.push(Line::from("Press Enter to sign, ESC to cancel"));
             } else {
                 lines.push(Line::from(Span::styled(
-                    "No wallet loaded!", 
-                    Style::default().fg(Color::Red)
+                    "No wallet loaded!",
+                    Style::default().fg(Color::Red),
                 )));
                 lines.push(Line::from(""));
                 lines.push(Line::from("Please import or generate a mnemonic first"));
@@ -1108,30 +1159,30 @@ impl App {
         } else {
             lines.push(Line::from("No PSBT loaded"));
         }
-        
+
         lines.push(Line::from(""));
         lines.push(Line::from("Press ESC to go back"));
-        
+
         let paragraph = Paragraph::new(lines)
             .block(Block::default().borders(Borders::ALL).title("Sign PSBT"))
             .wrap(Wrap { trim: true });
-        
+
         f.render_widget(paragraph, area);
     }
-    
+
     pub fn process_qr_import(&mut self, data: &str) -> Result<String, String> {
         use oxivault_qr::BBQrDecoder;
-        
+
         // Check if it's a BBQr part
         if data.starts_with("B$") {
             // Initialize or get existing decoder
             static mut DECODER: Option<BBQrDecoder> = None;
-            
+
             unsafe {
                 if DECODER.is_none() {
                     DECODER = Some(BBQrDecoder::new());
                 }
-                
+
                 if let Some(decoder) = &mut DECODER {
                     match decoder.add_part(data) {
                         Ok(_) => {
@@ -1140,9 +1191,12 @@ impl App {
                                     Ok(decoded_data) => {
                                         // Try to process the decoded data
                                         // First try as UTF-8 text (could be mnemonic or JSON)
-                                        let result = if let Ok(text) = String::from_utf8(decoded_data.clone()) {
+                                        let result = if let Ok(text) =
+                                            String::from_utf8(decoded_data.clone())
+                                        {
                                             // Check if it's a mnemonic
-                                            let words: Vec<&str> = text.split_whitespace().collect();
+                                            let words: Vec<&str> =
+                                                text.split_whitespace().collect();
                                             if words.len() >= 12 && words.len() <= 24 {
                                                 // Try to validate as mnemonic
                                                 match MnemonicManager::from_phrase(&text) {
@@ -1151,17 +1205,23 @@ impl App {
                                                         "Mnemonic imported from BBQr".to_string()
                                                     }
                                                     Err(_) => {
-                                                        format!("Text data imported: {} bytes", decoded_data.len())
+                                                        format!(
+                                                            "Text data imported: {} bytes",
+                                                            decoded_data.len()
+                                                        )
                                                     }
                                                 }
                                             } else {
-                                                format!("Text data imported: {} bytes", decoded_data.len())
+                                                format!(
+                                                    "Text data imported: {} bytes",
+                                                    decoded_data.len()
+                                                )
                                             }
                                         } else {
                                             // Binary data - could be PSBT or transaction
                                             format!("Binary data imported: {} bytes (PSBT processing not yet implemented)", decoded_data.len())
                                         };
-                                        
+
                                         // Reset decoder for next import
                                         DECODER = None;
                                         return Ok(result);
@@ -1173,7 +1233,10 @@ impl App {
                                 }
                             } else {
                                 let progress = decoder.progress();
-                                return Ok(format!("BBQr part added ({}/{})", progress.0, progress.1));
+                                return Ok(format!(
+                                    "BBQr part added ({}/{})",
+                                    progress.0, progress.1
+                                ));
                             }
                         }
                         Err(e) => {
@@ -1184,7 +1247,7 @@ impl App {
                 }
             }
         }
-        
+
         // Try as a plain mnemonic
         let words: Vec<&str> = data.split_whitespace().collect();
         if words.len() >= 12 && words.len() <= 24 {
@@ -1199,13 +1262,13 @@ impl App {
                 }
             }
         }
-        
+
         // Try as base64 PSBT
         if data.len() > 10 && !data.contains(' ') {
             // Looks like it could be base64
             return Ok("PSBT import not yet fully implemented".to_string());
         }
-        
+
         Err("Unrecognized QR code format".to_string())
     }
 }

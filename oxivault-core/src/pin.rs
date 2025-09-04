@@ -1,17 +1,22 @@
 //! PIN Protection Module
-//! 
+//!
 //! Provides secure PIN/password protection with:
 //! - Attempt counting and lockout
 //! - Secure PIN storage
 //! - Time-based lockout
 //! - Anti-bruteforce measures
 
-use crate::{Result, Error};
-use zeroize::Zeroize;
+use crate::{Error, Result};
 use bitcoin::hashes::{sha256, Hash, HashEngine, Hmac, HmacEngine};
+use zeroize::Zeroize;
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec, string::{String, ToString}, format};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 /// PIN manager for device protection
 pub struct PinManager {
@@ -50,26 +55,26 @@ impl PinManager {
         if pin.len() < 4 {
             return Err(Error::InvalidParameter("PIN too short".to_string()));
         }
-        
+
         if pin.len() > 32 {
             return Err(Error::InvalidParameter("PIN too long".to_string()));
         }
-        
+
         // Generate salt from entropy
         let mut salt_engine = sha256::HashEngine::default();
         salt_engine.input(entropy);
         salt_engine.input(b"oxivault-pin-salt");
         let salt_hash = sha256::Hash::from_engine(salt_engine);
         self.salt.copy_from_slice(&salt_hash[..]);
-        
+
         // Hash PIN with salt
         self.pin_hash = Self::hash_pin(pin, &self.salt);
-        
+
         // Reset counters
         self.failed_attempts = 0;
         self.is_locked = false;
         self.last_failed_timestamp = None;
-        
+
         Ok(())
     }
 
@@ -80,9 +85,10 @@ impl PinManager {
             if let Some(last_failed) = self.last_failed_timestamp {
                 let elapsed = current_time.saturating_sub(last_failed);
                 if elapsed < self.lockout_duration {
-                    return Err(Error::InvalidParameter(
-                        format!("Device locked. Wait {} seconds", self.lockout_duration - elapsed)
-                    ));
+                    return Err(Error::InvalidParameter(format!(
+                        "Device locked. Wait {} seconds",
+                        self.lockout_duration - elapsed
+                    )));
                 } else {
                     // Unlock after timeout
                     self.is_locked = false;
@@ -90,16 +96,16 @@ impl PinManager {
                 }
             }
         }
-        
+
         // Hash provided PIN
         let provided_hash = Self::hash_pin(pin, &self.salt);
-        
+
         // Constant-time comparison
         let mut diff = 0u8;
         for i in 0..32 {
             diff |= self.pin_hash[i] ^ provided_hash[i];
         }
-        
+
         if diff == 0 {
             // Success - reset counter
             self.failed_attempts = 0;
@@ -109,12 +115,13 @@ impl PinManager {
             // Failed attempt
             self.failed_attempts += 1;
             self.last_failed_timestamp = Some(current_time);
-            
+
             if self.failed_attempts >= self.max_attempts {
                 self.is_locked = true;
-                Err(Error::InvalidParameter(
-                    format!("Too many attempts. Device locked for {} seconds", self.lockout_duration)
-                ))
+                Err(Error::InvalidParameter(format!(
+                    "Too many attempts. Device locked for {} seconds",
+                    self.lockout_duration
+                )))
             } else {
                 Ok(false)
             }
@@ -126,7 +133,7 @@ impl PinManager {
         let mut engine = HmacEngine::<sha256::Hash>::new(salt);
         engine.input(pin.as_bytes());
         engine.input(b"oxivault-pin-v1");
-        
+
         // Additional iterations for slowdown
         let mut hash = Hmac::<sha256::Hash>::from_engine(engine).to_byte_array();
         for _ in 0..1000 {
@@ -134,7 +141,7 @@ impl PinManager {
             engine.input(&hash);
             hash = Hmac::<sha256::Hash>::from_engine(engine).to_byte_array();
         }
-        
+
         hash
     }
 
@@ -153,7 +160,7 @@ impl PinManager {
         if !self.is_locked {
             return LockoutStatus::Unlocked;
         }
-        
+
         if let Some(last_failed) = self.last_failed_timestamp {
             let elapsed = current_time.saturating_sub(last_failed);
             if elapsed < self.lockout_duration {
@@ -169,12 +176,18 @@ impl PinManager {
     }
 
     /// Change PIN (requires old PIN verification)
-    pub fn change_pin(&mut self, old_pin: &str, new_pin: &str, current_time: u64, entropy: &[u8]) -> Result<()> {
+    pub fn change_pin(
+        &mut self,
+        old_pin: &str,
+        new_pin: &str,
+        current_time: u64,
+        entropy: &[u8],
+    ) -> Result<()> {
         // Verify old PIN first
         if !self.verify_pin(old_pin, current_time)? {
             return Err(Error::InvalidParameter("Invalid old PIN".to_string()));
         }
-        
+
         // Set new PIN
         self.set_pin(new_pin, entropy)
     }
@@ -214,11 +227,11 @@ impl SecurePinEntry {
         if digit > 9 {
             return Err(Error::InvalidParameter("Invalid digit".to_string()));
         }
-        
+
         if self.buffer.len() >= self.max_length {
             return Err(Error::InvalidParameter("PIN too long".to_string()));
         }
-        
+
         self.buffer.push(b'0' + digit);
         Ok(())
     }
@@ -290,7 +303,7 @@ impl AntibruteforceDelay {
         if attempt == 0 {
             return 0;
         }
-        
+
         // Exponential backoff with cap
         // Manual power calculation for no_std compatibility
         let mut factor = 1.0_f32;
@@ -310,30 +323,30 @@ mod tests {
     fn test_pin_manager() {
         let mut manager = PinManager::new(3, 300);
         let entropy = [0x42; 32];
-        
+
         // Set PIN
         manager.set_pin("1234", &entropy).unwrap();
-        
+
         // Verify correct PIN
         assert!(manager.verify_pin("1234", 1000).unwrap());
-        
+
         // Verify wrong PIN
         assert!(!manager.verify_pin("5678", 2000).unwrap());
         assert_eq!(manager.remaining_attempts(), 2);
-        
+
         // More wrong attempts
         assert!(!manager.verify_pin("9999", 3000).unwrap());
         assert_eq!(manager.remaining_attempts(), 1);
-        
+
         // Last wrong attempt - should lock
         let result = manager.verify_pin("0000", 4000);
         assert!(result.is_err());
         assert!(manager.is_locked());
-        
+
         // Try while locked
         let result = manager.verify_pin("1234", 4100);
         assert!(result.is_err());
-        
+
         // Try after lockout expired
         assert!(manager.verify_pin("1234", 4301).unwrap());
         assert!(!manager.is_locked());
@@ -342,21 +355,21 @@ mod tests {
     #[test]
     fn test_secure_pin_entry() {
         let mut entry = SecurePinEntry::new(6);
-        
+
         // Add digits
         entry.add_digit(1).unwrap();
         entry.add_digit(2).unwrap();
         entry.add_digit(3).unwrap();
         entry.add_digit(4).unwrap();
-        
+
         assert_eq!(entry.as_str(), "1234");
         assert_eq!(entry.masked_display(), "****");
         assert_eq!(entry.len(), 4);
-        
+
         // Backspace
         entry.backspace();
         assert_eq!(entry.as_str(), "123");
-        
+
         // Clear
         entry.clear();
         assert!(entry.is_empty());
@@ -365,7 +378,7 @@ mod tests {
     #[test]
     fn test_antibruteforce_delay() {
         let delay_calc = AntibruteforceDelay::new(100, 2.0);
-        
+
         assert_eq!(delay_calc.calculate_delay(0), 0);
         assert_eq!(delay_calc.calculate_delay(1), 200);
         assert_eq!(delay_calc.calculate_delay(2), 400);
@@ -377,17 +390,17 @@ mod tests {
     fn test_pin_change() {
         let mut manager = PinManager::new(3, 300);
         let entropy = [0x42; 32];
-        
+
         // Set initial PIN
         manager.set_pin("1234", &entropy).unwrap();
-        
+
         // Change with wrong old PIN
         let result = manager.change_pin("5678", "9999", 1000, &entropy);
         assert!(result.is_err());
-        
+
         // Change with correct old PIN
         manager.change_pin("1234", "5678", 2000, &entropy).unwrap();
-        
+
         // Verify new PIN
         assert!(manager.verify_pin("5678", 3000).unwrap());
         assert!(!manager.verify_pin("1234", 4000).unwrap());

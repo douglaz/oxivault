@@ -2,31 +2,31 @@
 
 //! OxiVault Embedded - Hardware wallet firmware using Embassy-rs
 
-pub mod hal;
 pub mod drivers;
-pub mod secure_element;
+pub mod hal;
 #[cfg(feature = "nrf52840")]
 pub mod hal_nrf;
+pub mod secure_element;
 
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use heapless::{Vec, String};
+use heapless::{String, Vec};
 
 /// Hardware abstraction trait for different platforms
 pub trait HardwareWallet {
     /// Initialize the hardware
     async fn init(&mut self);
-    
+
     /// Display text on screen
     async fn display_text(&mut self, text: &str);
-    
+
     /// Display QR code
     async fn display_qr(&mut self, data: &[u8]);
-    
+
     /// Wait for button press
     async fn wait_for_button(&mut self) -> ButtonEvent;
-    
+
     /// Get entropy from hardware RNG
     async fn get_entropy(&mut self) -> [u8; 32];
 }
@@ -68,11 +68,13 @@ impl<H: HardwareWallet> WalletStateMachine<H> {
     /// Run the main state machine
     pub async fn run(&mut self) {
         self.hardware.init().await;
-        
+
         loop {
             match &self.state {
                 WalletState::Idle => {
-                    self.hardware.display_text("OxiVault Ready\nPress SELECT to start").await;
+                    self.hardware
+                        .display_text("OxiVault Ready\nPress SELECT to start")
+                        .await;
                     let button = self.hardware.wait_for_button().await;
                     if matches!(button, ButtonEvent::Select) {
                         self.state = WalletState::GeneratingMnemonic;
@@ -81,9 +83,11 @@ impl<H: HardwareWallet> WalletStateMachine<H> {
                 WalletState::GeneratingMnemonic => {
                     self.hardware.display_text("Generating mnemonic...").await;
                     let entropy = self.hardware.get_entropy().await;
-                    
+
                     // For now, show a placeholder until no_std mnemonic generation is fixed
-                    self.hardware.display_text("Mnemonic generated (placeholder)").await;
+                    self.hardware
+                        .display_text("Mnemonic generated (placeholder)")
+                        .await;
                     Timer::after(Duration::from_secs(2)).await;
                     self.state = WalletState::Idle;
                 }
@@ -136,7 +140,7 @@ pub async fn heartbeat_task() {
 pub async fn main_nrf(spawner: Spawner) {
     info!("OxiVault starting on nRF52840");
     spawner.spawn(heartbeat_task()).unwrap();
-    
+
     // Hardware initialization would go here
     // let mut wallet = WalletStateMachine::new(Nrf52Hardware::new());
     // wallet.run().await;
@@ -147,7 +151,7 @@ pub async fn main_nrf(spawner: Spawner) {
 pub async fn main_rp(spawner: Spawner) {
     info!("OxiVault starting on RP2040");
     spawner.spawn(heartbeat_task()).unwrap();
-    
+
     // Hardware initialization would go here
     // let mut wallet = WalletStateMachine::new(Rp2040Hardware::new());
     // wallet.run().await;

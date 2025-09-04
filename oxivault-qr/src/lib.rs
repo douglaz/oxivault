@@ -2,8 +2,8 @@
 
 //! QR code generation and parsing for OxiVault
 
-use qrcode::{QrCode, Version, EcLevel};
 use heapless::Vec as HeaplessVec;
+use qrcode::{EcLevel, QrCode, Version};
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -16,9 +16,9 @@ pub mod bbqr;
 pub mod bbqr_qr;
 pub mod ur;
 
-pub use bbqr::{BBQrEncoder, BBQrDecoder, BBQrHeader, FileType, EncodingType};
-pub use bbqr_qr::{BBQrQrGenerator, BBQrAnimator, BBQrScanner, ScanResult};
-pub use ur::{UrEncoder, UrDecoder, UrType, create_psbt_ur, parse_psbt_ur};
+pub use bbqr::{BBQrDecoder, BBQrEncoder, BBQrHeader, EncodingType, FileType};
+pub use bbqr_qr::{BBQrAnimator, BBQrQrGenerator, BBQrScanner, ScanResult};
+pub use ur::{create_psbt_ur, parse_psbt_ur, UrDecoder, UrEncoder, UrType};
 
 // Re-export Result type for consistency
 pub type Result<T> = core::result::Result<T, &'static str>;
@@ -49,7 +49,7 @@ impl QrGenerator {
     pub fn to_bitmap<const SIZE: usize>(qr: &QrCode) -> HeaplessVec<u8, SIZE> {
         let mut bitmap = HeaplessVec::new();
         let width = qr.width();
-        
+
         for y in 0..width {
             for x in 0..width {
                 if matches!(qr[(x, y)], qrcode::Color::Dark) {
@@ -59,7 +59,7 @@ impl QrGenerator {
                 }
             }
         }
-        
+
         bitmap
     }
 }
@@ -72,13 +72,13 @@ impl AsciiQrRenderer {
     pub fn render(qr: &QrCode) -> String {
         let width = qr.width();
         let mut output = String::new();
-        
+
         // Top border
         for _ in 0..width + 2 {
             output.push_str("██");
         }
         output.push('\n');
-        
+
         // QR code content with side borders
         for y in 0..width {
             output.push_str("██"); // Left border
@@ -91,21 +91,21 @@ impl AsciiQrRenderer {
             }
             output.push_str("██\n"); // Right border
         }
-        
+
         // Bottom border
         for _ in 0..width + 2 {
             output.push_str("██");
         }
         output.push('\n');
-        
+
         output
     }
-    
+
     /// Render QR code with compact unicode blocks
     pub fn render_compact(qr: &QrCode) -> String {
         let width = qr.width();
         let mut output = String::new();
-        
+
         // Process pairs of rows for half-block characters
         for y in (0..width).step_by(2) {
             for x in 0..width {
@@ -115,18 +115,18 @@ impl AsciiQrRenderer {
                 } else {
                     false
                 };
-                
+
                 let ch = match (top, bottom) {
-                    (false, false) => ' ',  // Both white
-                    (true, false) => '▀',    // Top black, bottom white
-                    (false, true) => '▄',    // Top white, bottom black
-                    (true, true) => '█',     // Both black
+                    (false, false) => ' ', // Both white
+                    (true, false) => '▀',  // Top black, bottom white
+                    (false, true) => '▄',  // Top white, bottom black
+                    (true, true) => '█',   // Both black
                 };
                 output.push(ch);
             }
             output.push('\n');
         }
-        
+
         output
     }
 }
@@ -134,7 +134,7 @@ impl AsciiQrRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bbqr::{BBQrEncoder, BBQrDecoder, FileType, EncodingType};
+    use crate::bbqr::{BBQrDecoder, BBQrEncoder, EncodingType, FileType};
 
     #[test]
     fn test_qr_generation() -> Result<()> {
@@ -146,35 +146,35 @@ mod tests {
     #[test]
     fn test_bbqr_integration() -> Result<()> {
         let data = b"test data for BBQr splitting";
-        
+
         // Test encoding
         let encoder = BBQrEncoder::new(FileType::Binary, EncodingType::Raw, 10);
         let parts = encoder.split(data)?;
         assert!(parts.len() > 1);
-        
+
         // Test decoding
         let mut decoder = BBQrDecoder::new();
         for part in &parts {
             decoder.add_part(part)?;
         }
-        
+
         assert!(decoder.is_complete());
         let combined = decoder.combine()?;
         assert_eq!(combined, data);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_ascii_renderer() -> Result<()> {
         let qr = QrGenerator::generate("test")?;
         let ascii = AsciiQrRenderer::render(&qr);
         assert!(ascii.contains("██"));
         assert!(ascii.contains('\n'));
-        
+
         let compact = AsciiQrRenderer::render_compact(&qr);
         assert!(compact.len() < ascii.len());
-        
+
         Ok(())
     }
 }

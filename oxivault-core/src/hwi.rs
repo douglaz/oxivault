@@ -1,18 +1,22 @@
 //! Hardware Wallet Interface (HWI) Protocol Implementation
-//! 
+//!
 //! Implements the HWI protocol for communication with desktop wallet software
 //! Compatible with Bitcoin Core, Electrum, Specter, and other HWI-enabled wallets
 
+use crate::{Error, Result};
 use bitcoin::{
-    Network,
     bip32::{DerivationPath, Fingerprint},
     psbt::Psbt,
+    Network,
 };
-use serde::{Serialize, Deserialize};
-use crate::{Result, Error};
+use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec::Vec, string::{String, ToString}, format};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 #[cfg(feature = "std")]
 use std::{format, string::ToString};
 
@@ -28,13 +32,9 @@ pub enum HwiCommand {
     /// Get master fingerprint
     GetMasterFingerprint,
     /// Get xpub at derivation path
-    GetXpub {
-        path: String,
-    },
+    GetXpub { path: String },
     /// Sign a PSBT
-    SignTx {
-        psbt: String,
-    },
+    SignTx { psbt: String },
     /// Get address at derivation path
     DisplayAddress {
         path: String,
@@ -42,18 +42,13 @@ pub enum HwiCommand {
         descriptor: Option<String>,
     },
     /// Sign a message
-    SignMessage {
-        message: String,
-        path: String,
-    },
+    SignMessage { message: String, path: String },
     /// Get device info
     GetDeviceInfo,
     /// Prompt PIN entry
     PromptPin,
     /// Send PIN
-    SendPin {
-        pin: String,
-    },
+    SendPin { pin: String },
     /// Toggle passphrase mode
     TogglePassphrase,
     /// Setup device (initialization)
@@ -154,7 +149,7 @@ impl HwiProtocol {
             locked: false,
         }
     }
-    
+
     /// Process HWI command
     pub async fn process_command(&mut self, command: HwiCommand) -> HwiResponse {
         match command {
@@ -165,22 +160,24 @@ impl HwiProtocol {
             HwiCommand::DisplayAddress { path, descriptor } => {
                 self.display_address(&path, descriptor.as_deref()).await
             }
-            HwiCommand::SignMessage { message, path } => {
-                self.sign_message(&message, &path).await
-            }
+            HwiCommand::SignMessage { message, path } => self.sign_message(&message, &path).await,
             HwiCommand::GetDeviceInfo => self.get_device_info(),
             HwiCommand::PromptPin => self.prompt_pin().await,
             HwiCommand::SendPin { pin } => self.send_pin(&pin).await,
             HwiCommand::TogglePassphrase => self.toggle_passphrase(),
             HwiCommand::Setup => self.setup().await,
             HwiCommand::Wipe => self.wipe().await,
-            HwiCommand::Restore { mnemonic, passphrase } => {
-                self.restore(mnemonic.as_deref(), passphrase.as_deref()).await
+            HwiCommand::Restore {
+                mnemonic,
+                passphrase,
+            } => {
+                self.restore(mnemonic.as_deref(), passphrase.as_deref())
+                    .await
             }
             HwiCommand::Backup => self.backup().await,
         }
     }
-    
+
     /// Enumerate devices
     fn enumerate(&self) -> HwiResponse {
         let device = DeviceInfo {
@@ -194,13 +191,13 @@ impl HwiProtocol {
             error: None,
             code: None,
         };
-        
+
         HwiResponse::Success {
             success: true,
             data: HwiData::Devices(vec![device]),
         }
     }
-    
+
     /// Get master fingerprint
     fn get_fingerprint(&self) -> HwiResponse {
         HwiResponse::Success {
@@ -210,7 +207,7 @@ impl HwiProtocol {
             },
         }
     }
-    
+
     /// Get extended public key
     async fn get_xpub(&self, path: &str) -> HwiResponse {
         // Parse derivation path
@@ -224,7 +221,7 @@ impl HwiProtocol {
                 };
             }
         };
-        
+
         // In real implementation, derive actual xpub
         // For now, return placeholder
         HwiResponse::Success {
@@ -234,7 +231,7 @@ impl HwiProtocol {
             },
         }
     }
-    
+
     /// Sign transaction (PSBT)
     async fn sign_tx(&mut self, psbt_str: &str) -> HwiResponse {
         // Decode base64 PSBT
@@ -248,7 +245,7 @@ impl HwiProtocol {
                 };
             }
         };
-        
+
         // Parse PSBT
         let psbt = match Psbt::deserialize(&psbt_bytes) {
             Ok(p) => p,
@@ -260,7 +257,7 @@ impl HwiProtocol {
                 };
             }
         };
-        
+
         // In real implementation, sign the PSBT
         // For now, return the same PSBT
         HwiResponse::Success {
@@ -270,7 +267,7 @@ impl HwiProtocol {
             },
         }
     }
-    
+
     /// Display address on device
     async fn display_address(&self, path: &str, descriptor: Option<&str>) -> HwiResponse {
         // Parse derivation path
@@ -284,7 +281,7 @@ impl HwiProtocol {
                 };
             }
         };
-        
+
         // In real implementation, derive and display address
         // For now, return placeholder
         let address = match self.network {
@@ -292,7 +289,7 @@ impl HwiProtocol {
             Network::Testnet => "tb1q7s49n5axjyqnkmlr5wqnqvvs5j8qu0dk5zslhm",
             _ => "bc1q7s49n5axjyqnkmlr5wqnqvvs5j8qu0d8jyf5kz",
         };
-        
+
         HwiResponse::Success {
             success: true,
             data: HwiData::Address {
@@ -300,7 +297,7 @@ impl HwiProtocol {
             },
         }
     }
-    
+
     /// Sign message
     async fn sign_message(&self, message: &str, path: &str) -> HwiResponse {
         // In real implementation, sign the message
@@ -312,7 +309,7 @@ impl HwiProtocol {
             },
         }
     }
-    
+
     /// Get device information
     fn get_device_info(&self) -> HwiResponse {
         let device = DeviceInfo {
@@ -326,13 +323,13 @@ impl HwiProtocol {
             error: None,
             code: None,
         };
-        
+
         HwiResponse::Success {
             success: true,
             data: HwiData::DeviceInfo(device),
         }
     }
-    
+
     /// Prompt for PIN
     async fn prompt_pin(&mut self) -> HwiResponse {
         // In real implementation, show PIN prompt on device
@@ -342,7 +339,7 @@ impl HwiProtocol {
             data: HwiData::Ok,
         }
     }
-    
+
     /// Send PIN
     async fn send_pin(&mut self, pin: &str) -> HwiResponse {
         // In real implementation, verify PIN
@@ -360,7 +357,7 @@ impl HwiProtocol {
             }
         }
     }
-    
+
     /// Toggle passphrase mode
     fn toggle_passphrase(&mut self) -> HwiResponse {
         // In real implementation, toggle passphrase mode
@@ -369,7 +366,7 @@ impl HwiProtocol {
             data: HwiData::Ok,
         }
     }
-    
+
     /// Setup device
     async fn setup(&mut self) -> HwiResponse {
         // In real implementation, initialize device
@@ -378,7 +375,7 @@ impl HwiProtocol {
             data: HwiData::Ok,
         }
     }
-    
+
     /// Wipe device
     async fn wipe(&mut self) -> HwiResponse {
         // In real implementation, wipe device
@@ -388,7 +385,7 @@ impl HwiProtocol {
             data: HwiData::Ok,
         }
     }
-    
+
     /// Restore from backup
     async fn restore(&mut self, mnemonic: Option<&str>, passphrase: Option<&str>) -> HwiResponse {
         // In real implementation, restore from mnemonic
@@ -406,7 +403,7 @@ impl HwiProtocol {
             }
         }
     }
-    
+
     /// Backup device
     async fn backup(&self) -> HwiResponse {
         // In real implementation, create backup
@@ -433,24 +430,26 @@ impl UsbTransport {
             output_buffer: Vec::with_capacity(4096),
         }
     }
-    
+
     /// Read command from USB
     pub async fn read_command(&mut self) -> Result<HwiCommand> {
         // In real implementation, read from USB endpoint
         // For now, return error
-        Err(Error::InvalidParameter("USB read not implemented".to_string()))
+        Err(Error::InvalidParameter(
+            "USB read not implemented".to_string(),
+        ))
     }
-    
+
     /// Write response to USB
     pub async fn write_response(&mut self, response: &HwiResponse) -> Result<()> {
         // Serialize response to JSON
         let json = serde_json::to_string(response)
             .map_err(|e| Error::InvalidParameter(format!("JSON error: {}", e)))?;
-        
+
         // In real implementation, write to USB endpoint
         self.output_buffer.clear();
         self.output_buffer.extend_from_slice(json.as_bytes());
-        
+
         Ok(())
     }
 }
@@ -465,16 +464,16 @@ mod hex_utils {
         }
         result
     }
-    
+
     pub fn decode(s: &str) -> Result<Vec<u8>, ()> {
         // Convert hex string to bytes
         if s.len() % 2 != 0 {
             return Err(());
         }
-        
+
         let mut result = Vec::new();
         for i in (0..s.len()).step_by(2) {
-            let byte = u8::from_str_radix(&s[i..i+2], 16).map_err(|_| ())?;
+            let byte = u8::from_str_radix(&s[i..i + 2], 16).map_err(|_| ())?;
             result.push(byte);
         }
         Ok(result)
@@ -487,7 +486,7 @@ mod base64 {
         // Real implementation needs proper base64
         super::hex_utils::encode(data)
     }
-    
+
     pub fn decode(s: &str) -> Result<Vec<u8>, ()> {
         // Simplified base64 decoding for no_std
         super::hex_utils::decode(s).map_err(|_| ())
@@ -499,14 +498,11 @@ use core::str::FromStr;
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_enumerate_command() {
-        let protocol = HwiProtocol::new(
-            Fingerprint::from([0; 4]),
-            Network::Bitcoin,
-        );
-        
+        let protocol = HwiProtocol::new(Fingerprint::from([0; 4]), Network::Bitcoin);
+
         // Mock test - actual implementation would need async runtime
         // let response = protocol.process_command(HwiCommand::Enumerate).await;
         // match response {
@@ -522,16 +518,16 @@ mod tests {
         //     }
         //     _ => panic!("Expected success"),
         // }
-        
+
         // Test protocol initialization
         assert_eq!(protocol.model, "OxiVault");
     }
-    
+
     #[test]
     fn test_fingerprint_command() {
         let fingerprint = Fingerprint::from([0xAB, 0xCD, 0xEF, 0x01]);
         let protocol = HwiProtocol::new(fingerprint, Network::Bitcoin);
-        
+
         let response = protocol.get_fingerprint();
         match response {
             HwiResponse::Success { success, data } => {

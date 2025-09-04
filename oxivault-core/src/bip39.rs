@@ -2,10 +2,10 @@
 
 use crate::{Error, Result};
 use bip39::{Language, Mnemonic};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec::Vec, string::String, format};
+use alloc::{format, string::String, vec::Vec};
 
 /// Mnemonic phrase manager
 pub struct MnemonicManager {
@@ -17,24 +17,26 @@ impl MnemonicManager {
     pub fn from_entropy(entropy: &[u8]) -> Result<Self> {
         // Validate entropy length (128, 160, 192, 224, or 256 bits)
         match entropy.len() {
-            16 | 20 | 24 | 28 | 32 => {},
-            _ => return Err(Error::InvalidEntropy(
-                format!("Invalid entropy length: {} bytes (need 16, 20, 24, 28, or 32)", entropy.len())
-            )),
+            16 | 20 | 24 | 28 | 32 => {}
+            _ => {
+                return Err(Error::InvalidEntropy(format!(
+                    "Invalid entropy length: {} bytes (need 16, 20, 24, 28, or 32)",
+                    entropy.len()
+                )))
+            }
         }
 
-        let mnemonic = Mnemonic::from_entropy(entropy)
-            .map_err(|_| Error::InvalidMnemonic)?;
-        
+        let mnemonic = Mnemonic::from_entropy(entropy).map_err(|_| Error::InvalidMnemonic)?;
+
         Ok(Self { mnemonic })
     }
 
     /// Create from existing mnemonic phrase (requires std)
     #[cfg(feature = "std")]
     pub fn from_phrase(phrase: &str) -> Result<Self> {
-        let mnemonic = Mnemonic::parse_in(Language::English, phrase)
-            .map_err(|_| Error::InvalidMnemonic)?;
-        
+        let mnemonic =
+            Mnemonic::parse_in(Language::English, phrase).map_err(|_| Error::InvalidMnemonic)?;
+
         Ok(Self { mnemonic })
     }
 
@@ -42,7 +44,7 @@ impl MnemonicManager {
     #[cfg(feature = "std")]
     pub fn generate(word_count: usize) -> Result<Self> {
         use rand::RngCore;
-        
+
         let entropy_bytes = match word_count {
             12 => 16,
             15 => 20,
@@ -54,10 +56,10 @@ impl MnemonicManager {
 
         let mut entropy = vec![0u8; entropy_bytes];
         rand::thread_rng().fill_bytes(&mut entropy);
-        
+
         Self::from_entropy(&entropy)
     }
-    
+
     /// Generate a new random mnemonic using no_std compatible RNG
     /// Requires an entropy source to be provided
     #[cfg(not(feature = "std"))]
@@ -73,10 +75,10 @@ impl MnemonicManager {
             24 => 32,
             _ => return Err(Error::InvalidMnemonic),
         };
-        
+
         let mut entropy = [0u8; 32]; // Max size needed
         rng.random_bytes(&mut entropy[..entropy_bytes])?;
-        
+
         Self::from_entropy(&entropy[..entropy_bytes])
     }
 
@@ -112,15 +114,12 @@ impl MnemonicManager {
         entropy.copy_from_slice(&hash2);
         entropy
     }
-    
+
     /// Generate mnemonic from user-provided entropy (no_std compatible)
     #[cfg(not(feature = "std"))]
-    pub fn generate_from_user_entropy(
-        word_count: usize,
-        user_entropy: &[u8],
-    ) -> Result<Self> {
+    pub fn generate_from_user_entropy(word_count: usize, user_entropy: &[u8]) -> Result<Self> {
         use crate::rng::EntropyMixer;
-        
+
         let entropy_bytes = match word_count {
             12 => 16,
             15 => 20,
@@ -129,10 +128,10 @@ impl MnemonicManager {
             24 => 32,
             _ => return Err(Error::InvalidMnemonic),
         };
-        
+
         // Mix user entropy using SHA256
         let mixed_entropy = Self::generate_entropy_from_bytes(user_entropy);
-        
+
         // Use only the required number of bytes
         Self::from_entropy(&mixed_entropy[..entropy_bytes])
     }
@@ -153,7 +152,7 @@ mod tests {
     fn test_validate_mnemonic() {
         let valid = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         assert!(MnemonicManager::validate(valid));
-        
+
         let invalid = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
         assert!(!MnemonicManager::validate(invalid));
     }
@@ -169,14 +168,14 @@ mod tests {
 #[cfg(all(test, not(feature = "std")))]
 mod no_std_tests {
     use super::*;
-    
+
     #[test]
     fn test_no_std_mnemonic_generation() {
         // Test generating mnemonic from user entropy
         let user_entropy = b"some random user input for entropy";
         let result = MnemonicManager::generate_from_user_entropy(12, user_entropy);
         assert!(result.is_ok());
-        
+
         // Test with hardware RNG mock
         fn mock_entropy(dest: &mut [u8]) -> Result<()> {
             // In real hardware, this would read from TRNG
@@ -185,7 +184,7 @@ mod no_std_tests {
             }
             Ok(())
         }
-        
+
         let mut rng = crate::rng::HardwareRng::new(mock_entropy);
         let result = MnemonicManager::generate_with_rng(24, &mut rng);
         assert!(result.is_ok());

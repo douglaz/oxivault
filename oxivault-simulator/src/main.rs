@@ -3,15 +3,15 @@
 use clap::{Parser, Subcommand};
 use oxivault_core::{
     bip39::MnemonicManager,
-    wallet::{Wallet, ScriptType},
+    wallet::{ScriptType, Wallet},
     Network,
 };
 
 mod cli;
+mod qr_import;
 mod tui;
 mod tui_enhanced;
 mod tui_signing;
-mod qr_import;
 
 #[derive(Parser)]
 #[command(name = "oxivault-sim")]
@@ -64,21 +64,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tui::App::run()?;
         }
         Some(command) => match command {
-        Commands::Generate { words } => {
-            generate_mnemonic(words)?;
-        }
-        Commands::Derive {
-            mnemonic,
-            passphrase,
-            script_type,
-            count,
-        } => {
-            let mnemonic = mnemonic.unwrap_or_else(|| {
+            Commands::Generate { words } => {
+                generate_mnemonic(words)?;
+            }
+            Commands::Derive {
+                mnemonic,
+                passphrase,
+                script_type,
+                count,
+            } => {
+                let mnemonic = mnemonic.unwrap_or_else(|| {
                 "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string()
             });
-            derive_addresses(&mnemonic, &passphrase, &script_type, count)?;
-        }
-                Commands::Validate { mnemonic } => {
+                derive_addresses(&mnemonic, &passphrase, &script_type, count)?;
+            }
+            Commands::Validate { mnemonic } => {
                 validate_mnemonic(&mnemonic)?;
             }
             Commands::Sign => {
@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Run the enhanced TUI (placeholder for now)
                 println!("Enhanced TUI with QR export - coming soon!");
             }
-        }
+        },
     }
 
     Ok(())
@@ -116,12 +116,14 @@ fn derive_addresses(
         "native-segwit" => ScriptType::NativeSegwit,
         "taproot" => ScriptType::Taproot,
         _ => {
-            return Err("Invalid script type. Use: legacy, nested-segwit, native-segwit, or taproot".into());
+            return Err(
+                "Invalid script type. Use: legacy, nested-segwit, native-segwit, or taproot".into(),
+            );
         }
     };
 
     let wallet = Wallet::from_mnemonic(mnemonic, passphrase, Network::Bitcoin)?;
-    
+
     println!("Deriving {} addresses for {}", count, script_type_str);
     println!("Network: Bitcoin Mainnet");
     println!("Derivation: BIP-{}", script_type.bip_number());
@@ -129,11 +131,12 @@ fn derive_addresses(
 
     for i in 0..count {
         let address = wallet.get_address(script_type, 0, 0, i as u32)?;
-        println!("m/{}'/{}'/{}'/{}/{}: {}", 
+        println!(
+            "m/{}'/{}'/{}'/{}/{}: {}",
             script_type.bip_number(),
-            0,  // Bitcoin
-            0,  // Account
-            0,  // External chain
+            0, // Bitcoin
+            0, // Account
+            0, // External chain
             i,
             address
         );

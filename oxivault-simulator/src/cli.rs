@@ -2,10 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use oxivault_core::bip39::MnemonicManager;
-use oxivault_qr::{
-    QrGenerator, AsciiQrRenderer,
-    BBQrEncoder, BBQrDecoder, FileType, EncodingType,
-};
+use oxivault_qr::{AsciiQrRenderer, BBQrDecoder, BBQrEncoder, EncodingType, FileType, QrGenerator};
 use std::fs;
 
 #[derive(Parser, Debug)]
@@ -127,10 +124,14 @@ impl Cli {
 
     fn handle_generate(&self, cmd: &GenerateCommands) -> Result<(), Box<dyn std::error::Error>> {
         match cmd {
-            GenerateCommands::Address { address, output, compact } => {
+            GenerateCommands::Address {
+                address,
+                output,
+                compact,
+            } => {
                 let qr = QrGenerator::generate(address)
                     .map_err(|e| format!("Failed to generate QR: {}", e))?;
-                
+
                 let rendered = if *compact {
                     AsciiQrRenderer::render_compact(&qr)
                 } else {
@@ -139,10 +140,14 @@ impl Cli {
 
                 self.output_result(&rendered, output.as_deref())?;
             }
-            GenerateCommands::Text { text, output, compact } => {
+            GenerateCommands::Text {
+                text,
+                output,
+                compact,
+            } => {
                 let qr = QrGenerator::generate(text)
                     .map_err(|e| format!("Failed to generate QR: {}", e))?;
-                
+
                 let rendered = if *compact {
                     AsciiQrRenderer::render_compact(&qr)
                 } else {
@@ -159,55 +164,59 @@ impl Cli {
         match cmd {
             ImportCommands::Mnemonic { files } => {
                 let mut decoder = BBQrDecoder::new();
-                
+
                 for file in files {
                     let content = fs::read_to_string(file)?;
-                    decoder.add_part(&content)
+                    decoder
+                        .add_part(&content)
                         .map_err(|e| format!("Failed to add part from {}: {}", file, e))?;
-                    
+
                     let (received, total) = decoder.progress();
                     println!("Progress: {}/{} parts", received, total);
                 }
-                
+
                 if !decoder.is_complete() {
                     return Err("Not all parts received".into());
                 }
-                
-                let data = decoder.combine()
+
+                let data = decoder
+                    .combine()
                     .map_err(|e| format!("Failed to combine parts: {}", e))?;
-                
+
                 let mnemonic = String::from_utf8(data)?;
-                
+
                 // Validate the mnemonic
                 if !MnemonicManager::validate(&mnemonic) {
                     return Err("Invalid mnemonic recovered from QR".into());
                 }
-                
+
                 println!("Successfully imported mnemonic:");
                 println!("{}", mnemonic);
             }
             ImportCommands::Psbt { files, output } => {
                 let mut decoder = BBQrDecoder::new();
-                
+
                 for file in files {
                     let content = fs::read_to_string(file)?;
-                    decoder.add_part(&content)
+                    decoder
+                        .add_part(&content)
                         .map_err(|e| format!("Failed to add part from {}: {}", file, e))?;
-                    
+
                     let (received, total) = decoder.progress();
                     println!("Progress: {}/{} parts", received, total);
                 }
-                
+
                 if !decoder.is_complete() {
                     return Err("Not all parts received".into());
                 }
-                
-                let data = decoder.combine()
+
+                let data = decoder
+                    .combine()
                     .map_err(|e| format!("Failed to combine parts: {}", e))?;
-                
+
                 // Convert to hex string for PSBT
                 let hex = hex::encode(&data);
-                
+
                 if let Some(output_file) = output {
                     fs::write(output_file, hex)?;
                     println!("PSBT saved to {}", output_file);
@@ -222,75 +231,90 @@ impl Cli {
 
     fn handle_export(&self, cmd: &ExportCommands) -> Result<(), Box<dyn std::error::Error>> {
         match cmd {
-            ExportCommands::Mnemonic { mnemonic, output_dir, fragment_size } => {
+            ExportCommands::Mnemonic {
+                mnemonic,
+                output_dir,
+                fragment_size,
+            } => {
                 // Read mnemonic from file if it exists, otherwise use as-is
                 let mnemonic_text = if fs::metadata(mnemonic).is_ok() {
                     fs::read_to_string(mnemonic)?
                 } else {
                     mnemonic.clone()
                 };
-                
+
                 // Validate mnemonic
                 if !MnemonicManager::validate(&mnemonic_text) {
                     return Err("Invalid mnemonic".into());
                 }
-                
+
                 let encoder = BBQrEncoder::new(FileType::Text, EncodingType::Raw, *fragment_size);
-                let parts = encoder.split(mnemonic_text.as_bytes())
+                let parts = encoder
+                    .split(mnemonic_text.as_bytes())
                     .map_err(|e| format!("Failed to split mnemonic: {}", e))?;
-                
+
                 println!("Generating {} BBQr parts...", parts.len());
-                
+
                 for (i, part) in parts.iter().enumerate() {
                     let filename = format!("{}/mnemonic_part_{:03}.txt", output_dir, i + 1);
                     fs::write(&filename, part)?;
-                    
+
                     // Also generate QR image
                     if let Ok(qr) = QrGenerator::generate(part) {
-                        let qr_filename = format!("{}/mnemonic_part_{:03}_qr.txt", output_dir, i + 1);
+                        let qr_filename =
+                            format!("{}/mnemonic_part_{:03}_qr.txt", output_dir, i + 1);
                         let rendered = AsciiQrRenderer::render_compact(&qr);
                         fs::write(&qr_filename, rendered)?;
                     }
-                    
+
                     println!("Wrote {}", filename);
                 }
-                
+
                 println!("Successfully exported {} BBQr parts", parts.len());
             }
-            ExportCommands::Psbt { psbt, output_dir, fragment_size } => {
+            ExportCommands::Psbt {
+                psbt,
+                output_dir,
+                fragment_size,
+            } => {
                 // Read PSBT from file if it exists, otherwise treat as hex
                 let psbt_bytes = if fs::metadata(psbt).is_ok() {
                     fs::read(psbt)?
                 } else {
                     hex::decode(psbt)?
                 };
-                
+
                 let encoder = BBQrEncoder::new(FileType::Psbt, EncodingType::Raw, *fragment_size);
-                let parts = encoder.split(&psbt_bytes)
+                let parts = encoder
+                    .split(&psbt_bytes)
                     .map_err(|e| format!("Failed to split PSBT: {}", e))?;
-                
+
                 println!("Generating {} BBQr parts...", parts.len());
-                
+
                 for (i, part) in parts.iter().enumerate() {
                     let filename = format!("{}/psbt_part_{:03}.txt", output_dir, i + 1);
                     fs::write(&filename, part)?;
-                    
+
                     // Also generate QR image
                     if let Ok(qr) = QrGenerator::generate(part) {
                         let qr_filename = format!("{}/psbt_part_{:03}_qr.txt", output_dir, i + 1);
                         let rendered = AsciiQrRenderer::render_compact(&qr);
                         fs::write(&qr_filename, rendered)?;
                     }
-                    
+
                     println!("Wrote {}", filename);
                 }
-                
+
                 println!("Successfully exported {} BBQr parts", parts.len());
             }
-            ExportCommands::Address { address, output, compact } => {
+            ExportCommands::Address {
+                address,
+                output,
+                compact,
+            } => {
                 let qr = QrGenerator::generate(address)
                     .map_err(|e| format!("Failed to generate QR: {}", e))?;
-                
+
                 let rendered = if *compact {
                     AsciiQrRenderer::render_compact(&qr)
                 } else {
@@ -303,7 +327,11 @@ impl Cli {
         Ok(())
     }
 
-    fn output_result(&self, data: &str, output_file: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    fn output_result(
+        &self,
+        data: &str,
+        output_file: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(file) = output_file {
             fs::write(file, data)?;
             println!("Output saved to {}", file);

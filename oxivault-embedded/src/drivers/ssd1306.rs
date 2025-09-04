@@ -1,19 +1,19 @@
 //! SSD1306 OLED Display Driver
-//! 
+//!
 //! Driver for SSD1306 128x64 OLED displays commonly used in hardware wallets
 //! Supports both I2C and SPI interfaces
 
 #![no_std]
 
-use embedded_hal_async::{i2c::I2c, spi::SpiDevice, delay::DelayNs};
+use defmt::*;
 use embedded_graphics_core::{
+    geometry::{Point, Size},
     pixelcolor::BinaryColor,
     prelude::*,
     Pixel,
-    geometry::{Point, Size},
 };
+use embedded_hal_async::{delay::DelayNs, i2c::I2c, spi::SpiDevice};
 use heapless::Vec;
-use defmt::*;
 
 /// Display size
 pub const DISPLAY_WIDTH: u32 = 128;
@@ -78,10 +78,10 @@ pub enum Rotation {
 /// SSD1306 Display Interface
 pub trait DisplayInterface {
     type Error;
-    
+
     /// Send command to display
     async fn send_command(&mut self, cmd: u8) -> Result<(), Self::Error>;
-    
+
     /// Send data to display
     async fn send_data(&mut self, data: &[u8]) -> Result<(), Self::Error>;
 }
@@ -103,17 +103,17 @@ where
     I2C: I2c,
 {
     type Error = I2C::Error;
-    
+
     async fn send_command(&mut self, cmd: u8) -> Result<(), Self::Error> {
         self.i2c.write(self.address, &[0x00, cmd]).await
     }
-    
+
     async fn send_data(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         // Create buffer with control byte
         let mut buffer: Vec<u8, 129> = Vec::new();
         buffer.push(0x40).ok();
         buffer.extend_from_slice(data).ok();
-        
+
         self.i2c.write(self.address, &buffer).await
     }
 }
@@ -137,30 +137,31 @@ where
             rotation,
         }
     }
-    
+
     /// Initialize the display
     pub async fn init(&mut self) -> Result<(), DI::Error> {
         // Display off
         self.send_command(Command::DisplayOff).await?;
-        
+
         // Set display clock divide ratio
         self.send_command(Command::SetDisplayClockDiv(0x80)).await?;
-        
+
         // Set multiplex ratio
         self.send_command(Command::SetMultiplex(63)).await?;
-        
+
         // Set display offset
         self.send_command(Command::SetDisplayOffset(0)).await?;
-        
+
         // Set start line
         self.interface.send_command(0x40).await?;
-        
+
         // Set charge pump
         self.send_command(Command::SetChargePump(true)).await?;
-        
+
         // Set memory mode
-        self.send_command(Command::SetMemoryMode(MemoryMode::Horizontal)).await?;
-        
+        self.send_command(Command::SetMemoryMode(MemoryMode::Horizontal))
+            .await?;
+
         // Set segment remap and COM scan direction based on rotation
         match self.rotation {
             Rotation::Rotate0 => {
@@ -172,34 +173,34 @@ where
                 self.interface.send_command(0xC0).await?; // COM scan direction
             }
         }
-        
+
         // Set COM pins
         self.send_command(Command::SetComPins(0x12)).await?;
-        
+
         // Set contrast
         self.send_command(Command::SetContrast(0x7F)).await?;
-        
+
         // Set precharge period
         self.send_command(Command::SetPrecharge(0xF1)).await?;
-        
+
         // Set VCOMH deselect level
         self.send_command(Command::SetVcomDeselect(0x40)).await?;
-        
+
         // Display all on resume
         self.send_command(Command::DisplayAllOnResume).await?;
-        
+
         // Normal display
         self.send_command(Command::NormalDisplay).await?;
-        
+
         // Clear display
         self.clear().await?;
-        
+
         // Display on
         self.send_command(Command::DisplayOn).await?;
-        
+
         Ok(())
     }
-    
+
     /// Send command to display
     async fn send_command(&mut self, cmd: Command) -> Result<(), DI::Error> {
         match cmd {
@@ -253,49 +254,51 @@ where
             }
             Command::SetChargePump(enable) => {
                 self.interface.send_command(0x8D).await?;
-                self.interface.send_command(if enable { 0x14 } else { 0x10 }).await?;
+                self.interface
+                    .send_command(if enable { 0x14 } else { 0x10 })
+                    .await?;
             }
         }
         Ok(())
     }
-    
+
     /// Clear the display
     pub async fn clear(&mut self) -> Result<(), DI::Error> {
         self.buffer = [0; (DISPLAY_WIDTH as usize) * (DISPLAY_HEIGHT as usize) / 8];
         self.flush().await
     }
-    
+
     /// Flush buffer to display
     pub async fn flush(&mut self) -> Result<(), DI::Error> {
         // Set column address
         self.send_command(Command::SetColumnAddress(0, 127)).await?;
-        
+
         // Set page address
         self.send_command(Command::SetPageAddress(0, 7)).await?;
-        
+
         // Send the buffer
         self.interface.send_data(&self.buffer).await?;
-        
+
         Ok(())
     }
-    
+
     /// Set pixel in buffer
     pub fn set_pixel(&mut self, x: u32, y: u32, color: bool) {
         if x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT {
             return;
         }
-        
+
         let page = y / 8;
         let bit = y % 8;
         let index = (page * DISPLAY_WIDTH + x) as usize;
-        
+
         if color {
             self.buffer[index] |= 1 << bit;
         } else {
             self.buffer[index] &= !(1 << bit);
         }
     }
-    
+
     /// Draw text (simplified without font support)
     pub fn draw_text(&mut self, text: &str, x: i32, y: i32, size: TextSize) {
         // Simplified text rendering - just draw pixels for demonstration
@@ -304,7 +307,7 @@ where
             TextSize::Small => 6,
             TextSize::Large => 9,
         };
-        
+
         for (i, _ch) in text.chars().enumerate() {
             let px = x + (i as i32 * char_width);
             if px >= 0 && px < DISPLAY_WIDTH as i32 {
@@ -312,13 +315,13 @@ where
             }
         }
     }
-    
+
     /// Display QR code (simplified - assumes pre-rendered)
     pub fn draw_qr(&mut self, qr_data: &[u8], x: u32, y: u32, scale: u32) {
         // This is a simplified QR renderer
         // In production, integrate with QR generation library
         let qr_size = 25; // Typical QR v1 size
-        
+
         for row in 0..qr_size {
             for col in 0..qr_size {
                 let byte_index = row * 4 + col / 8;
@@ -327,11 +330,7 @@ where
                     if bit == 1 {
                         for sy in 0..scale {
                             for sx in 0..scale {
-                                self.set_pixel(
-                                    x + col * scale + sx,
-                                    y + row * scale + sy,
-                                    true,
-                                );
+                                self.set_pixel(x + col * scale + sx, y + row * scale + sy, true);
                             }
                         }
                     }
@@ -339,22 +338,22 @@ where
             }
         }
     }
-    
+
     /// Set display brightness
     pub async fn set_brightness(&mut self, brightness: u8) -> Result<(), DI::Error> {
         self.send_command(Command::SetContrast(brightness)).await
     }
-    
+
     /// Turn display on
     pub async fn on(&mut self) -> Result<(), DI::Error> {
         self.send_command(Command::DisplayOn).await
     }
-    
+
     /// Turn display off
     pub async fn off(&mut self) -> Result<(), DI::Error> {
         self.send_command(Command::DisplayOff).await
     }
-    
+
     /// Invert display
     pub async fn invert(&mut self, invert: bool) -> Result<(), DI::Error> {
         if invert {
@@ -379,19 +378,18 @@ where
 {
     type Color = BinaryColor;
     type Error = core::convert::Infallible;
-    
+
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         for Pixel(coord, color) in pixels.into_iter() {
-            if coord.x >= 0 && coord.x < DISPLAY_WIDTH as i32 &&
-               coord.y >= 0 && coord.y < DISPLAY_HEIGHT as i32 {
-                self.set_pixel(
-                    coord.x as u32,
-                    coord.y as u32,
-                    color == BinaryColor::On,
-                );
+            if coord.x >= 0
+                && coord.x < DISPLAY_WIDTH as i32
+                && coord.y >= 0
+                && coord.y < DISPLAY_HEIGHT as i32
+            {
+                self.set_pixel(coord.x as u32, coord.y as u32, color == BinaryColor::On);
             }
         }
         Ok(())
@@ -410,31 +408,28 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_pixel_indexing() {
-        let mut display = Ssd1306::new(
-            MockInterface,
-            Rotation::Rotate0,
-        );
-        
+        let mut display = Ssd1306::new(MockInterface, Rotation::Rotate0);
+
         // Test setting a pixel
         display.set_pixel(10, 20, true);
         let page = 20 / 8; // = 2
-        let bit = 20 % 8;  // = 4
+        let bit = 20 % 8; // = 4
         let index = (page * 128 + 10) as usize;
         assert_eq!(display.buffer[index] & (1 << bit), 1 << bit);
     }
-    
+
     struct MockInterface;
-    
+
     impl DisplayInterface for MockInterface {
         type Error = ();
-        
+
         async fn send_command(&mut self, _cmd: u8) -> Result<(), Self::Error> {
             Ok(())
         }
-        
+
         async fn send_data(&mut self, _data: &[u8]) -> Result<(), Self::Error> {
             Ok(())
         }

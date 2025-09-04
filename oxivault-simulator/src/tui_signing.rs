@@ -1,8 +1,7 @@
 //! TUI Transaction Signing Workflow
-//! 
+//!
 //! Provides a complete transaction signing interface with Mock HAL integration
 
-use std::io;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
@@ -13,27 +12,23 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap, Gauge},
+    widgets::{Block, Borders, Gauge, Paragraph, Wrap},
     Frame, Terminal,
 };
+use std::io;
 
 use oxivault_core::{
     bip39::MnemonicManager,
-    wallet::Wallet,
-    psbt_parser::{PsbtParser, PsbtAnalysis},
     hal::{
-        mock::MockHAL,
-        HardwareAbstractionLayer,
-        Input as HalInput, Storage as HalStorage,
-        InputEvent, Button,
+        mock::MockHAL, Button, HardwareAbstractionLayer, Input as HalInput, InputEvent,
+        Storage as HalStorage,
     },
+    psbt_parser::{PsbtAnalysis, PsbtParser},
+    wallet::Wallet,
     Network,
 };
 
-use oxivault_qr::{
-    AsciiQrRenderer,
-    bbqr_qr::BBQrQrGenerator,
-};
+use oxivault_qr::{bbqr_qr::BBQrQrGenerator, AsciiQrRenderer};
 
 use crate::tui_enhanced::PsbtExportState;
 
@@ -186,7 +181,10 @@ impl SigningApp {
         if keys.is_empty() {
             // Add a sample mnemonic for testing
             let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-            let _ = self.hal.storage.write("test_wallet", test_mnemonic.as_bytes());
+            let _ = self
+                .hal
+                .storage
+                .write("test_wallet", test_mnemonic.as_bytes());
             self.set_status(
                 "Test wallet loaded into storage".to_string(),
                 StatusSeverity::Info,
@@ -221,9 +219,9 @@ impl SigningApp {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Min(10),    // Content
-                Constraint::Length(3),  // Status
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Content
+                Constraint::Length(3), // Status
             ])
             .split(f.area());
 
@@ -255,7 +253,11 @@ impl SigningApp {
 
         let title = format!("OxiVault Transaction Signing - {}", wallet_status);
         let title_widget = Paragraph::new(title)
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         f.render_widget(title_widget, area);
@@ -285,10 +287,7 @@ impl SigningApp {
             ("ESC", "Quit", "Exit application"),
         ];
 
-        let mut lines = vec![
-            Line::from("Transaction Signing Menu"),
-            Line::from(""),
-        ];
+        let mut lines = vec![Line::from("Transaction Signing Menu"), Line::from("")];
 
         for (key, title, desc) in menu_items {
             let is_enabled = match title {
@@ -318,10 +317,7 @@ impl SigningApp {
     }
 
     fn draw_key_management(&self, f: &mut Frame, area: Rect) {
-        let mut lines = vec![
-            Line::from("Key Management"),
-            Line::from(""),
-        ];
+        let mut lines = vec![Line::from("Key Management"), Line::from("")];
 
         // Show stored keys
         if let Ok(keys) = self.hal.storage.list_keys() {
@@ -346,7 +342,11 @@ impl SigningApp {
         lines.push(Line::from("[ESC] Back to menu"));
 
         let paragraph = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("Key Management"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Key Management"),
+            )
             .wrap(Wrap { trim: true });
 
         f.render_widget(paragraph, area);
@@ -445,7 +445,11 @@ impl SigningApp {
             lines.push(Line::from(""));
             lines.push(Line::from(format!(
                 "Status: {} ({}/{} signatures)",
-                if analysis.is_complete { "Ready to broadcast" } else { "Needs signatures" },
+                if analysis.is_complete {
+                    "Ready to broadcast"
+                } else {
+                    "Needs signatures"
+                },
                 analysis.signatures_present,
                 analysis.signatures_required
             )));
@@ -457,7 +461,11 @@ impl SigningApp {
         lines.push(Line::from("[Enter] Proceed to sign | [ESC] Back"));
 
         let paragraph = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("Transaction Review"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Transaction Review"),
+            )
             .wrap(Wrap { trim: true });
 
         f.render_widget(paragraph, area);
@@ -493,7 +501,7 @@ impl SigningApp {
                 "Security Checks:",
                 Style::default().add_modifier(Modifier::UNDERLINED),
             )));
-            
+
             let checks = vec![
                 ("Address verification", true),
                 ("Amount verification", true),
@@ -517,9 +525,7 @@ impl SigningApp {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             "DO YOU WANT TO PROCEED WITH SIGNING?",
-            Style::default()
-                .fg(Color::Red)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
         lines.push(Line::from("[Y] Yes, sign transaction"));
@@ -542,8 +548,8 @@ impl SigningApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(5),  // Progress bar
-                Constraint::Min(5),     // Status
+                Constraint::Length(5), // Progress bar
+                Constraint::Min(5),    // Status
             ])
             .split(area);
 
@@ -555,30 +561,33 @@ impl SigningApp {
         };
 
         let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Signing Progress"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Signing Progress"),
+            )
             .gauge_style(Style::default().fg(Color::Green))
             .percent((progress * 100.0) as u16)
             .label(format!(
                 "{}/{} inputs signed",
-                self.signing_progress.signed_inputs,
-                self.signing_progress.total_inputs
+                self.signing_progress.signed_inputs, self.signing_progress.total_inputs
             ));
 
         f.render_widget(gauge, chunks[0]);
 
         // Status details
-        let mut lines = vec![
-            Line::from(format!(
-                "Current operation: {}",
-                self.signing_progress.current_operation
-            )),
-        ];
+        let mut lines = vec![Line::from(format!(
+            "Current operation: {}",
+            self.signing_progress.current_operation
+        ))];
 
         if self.signing_progress.is_complete {
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 "✓ Signing complete!",
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             )));
             lines.push(Line::from(""));
             lines.push(Line::from("[Enter] Continue to export"));
@@ -600,9 +609,9 @@ impl SigningApp {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),  // Instructions
-                    Constraint::Min(10),    // QR display
-                    Constraint::Length(3),  // Navigation
+                    Constraint::Length(3), // Instructions
+                    Constraint::Min(10),   // QR display
+                    Constraint::Length(3), // Navigation
                 ])
                 .split(area);
 
@@ -620,15 +629,14 @@ impl SigningApp {
             if export_state.current_index < export_state.qr_codes.len() {
                 let qr_text = &export_state.qr_codes[export_state.current_index];
                 let lines: Vec<Line> = qr_text.lines().map(|l| Line::from(l)).collect();
-                
-                let qr_display = Paragraph::new(lines)
-                    .alignment(Alignment::Center);
+
+                let qr_display = Paragraph::new(lines).alignment(Alignment::Center);
                 f.render_widget(qr_display, chunks[1]);
             }
 
             // Navigation
             let nav = Paragraph::new(
-                "[←/→] Navigate parts | [G] Grid view | [A] Auto-animate | [ESC] Done"
+                "[←/→] Navigate parts | [G] Grid view | [A] Auto-animate | [ESC] Done",
             )
             .alignment(Alignment::Center);
             f.render_widget(nav, chunks[2]);
@@ -648,7 +656,11 @@ impl SigningApp {
             ];
 
             let paragraph = Paragraph::new(lines)
-                .block(Block::default().borders(Borders::ALL).title("Export Options"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Export Options"),
+                )
                 .wrap(Wrap { trim: true });
 
             f.render_widget(paragraph, area);
@@ -717,20 +729,14 @@ impl SigningApp {
                 if self.wallet.is_some() {
                     self.screen = SigningScreen::ImportPsbt;
                 } else {
-                    self.set_status(
-                        "Load a wallet first".to_string(),
-                        StatusSeverity::Warning,
-                    );
+                    self.set_status("Load a wallet first".to_string(), StatusSeverity::Warning);
                 }
             }
             KeyCode::Char('3') => {
                 if self.current_psbt.is_some() {
                     self.screen = SigningScreen::ReviewTransaction;
                 } else {
-                    self.set_status(
-                        "No transaction loaded".to_string(),
-                        StatusSeverity::Warning,
-                    );
+                    self.set_status("No transaction loaded".to_string(), StatusSeverity::Warning);
                 }
             }
             KeyCode::Char('4') => {
@@ -834,28 +840,26 @@ impl SigningApp {
                     // Try to parse as PSBT
                     let parser = PsbtParser::new(Network::Bitcoin);
                     match parser.parse_base64(&self.input_buffer) {
-                        Ok(psbt) => {
-                            match parser.analyze(&psbt) {
-                                Ok(analysis) => {
-                                    use base64::{Engine as _, engine::general_purpose::STANDARD};
-                                    if let Ok(data) = STANDARD.decode(&self.input_buffer) {
-                                        self.current_psbt = Some(data);
-                                        self.psbt_analysis = Some(analysis);
-                                        self.set_status(
-                                            "PSBT imported successfully".to_string(),
-                                            StatusSeverity::Success,
-                                        );
-                                        self.screen = SigningScreen::ReviewTransaction;
-                                    }
-                                }
-                                Err(e) => {
+                        Ok(psbt) => match parser.analyze(&psbt) {
+                            Ok(analysis) => {
+                                use base64::{engine::general_purpose::STANDARD, Engine as _};
+                                if let Ok(data) = STANDARD.decode(&self.input_buffer) {
+                                    self.current_psbt = Some(data);
+                                    self.psbt_analysis = Some(analysis);
                                     self.set_status(
-                                        format!("Failed to analyze PSBT: {:?}", e),
-                                        StatusSeverity::Error,
+                                        "PSBT imported successfully".to_string(),
+                                        StatusSeverity::Success,
                                     );
+                                    self.screen = SigningScreen::ReviewTransaction;
                                 }
                             }
-                        }
+                            Err(e) => {
+                                self.set_status(
+                                    format!("Failed to analyze PSBT: {:?}", e),
+                                    StatusSeverity::Error,
+                                );
+                            }
+                        },
                         Err(e) => {
                             self.set_status(
                                 format!("Invalid PSBT: {:?}", e),
@@ -892,7 +896,7 @@ impl SigningApp {
                     self.signing_progress.current_operation = "Initializing signing...".to_string();
                     self.signing_progress.is_complete = false;
                     self.screen = SigningScreen::SigningProgress;
-                    
+
                     // Simulate signing process
                     self.simulate_signing();
                 }
@@ -978,15 +982,15 @@ impl SigningApp {
     fn simulate_signing(&mut self) {
         // Simulate the signing process
         // In real implementation, this would use the wallet to sign
-        
+
         for i in 0..self.signing_progress.total_inputs {
             self.signing_progress.signed_inputs = i + 1;
             self.signing_progress.current_operation = format!("Signing input {}...", i + 1);
         }
-        
+
         self.signing_progress.is_complete = true;
         self.signing_progress.current_operation = "All inputs signed".to_string();
-        
+
         // Update analysis to show signed
         if let Some(ref mut analysis) = self.psbt_analysis {
             analysis.is_complete = true;
@@ -995,7 +999,7 @@ impl SigningApp {
                 input.is_signed = true;
             }
         }
-        
+
         self.set_status(
             "Transaction signed successfully".to_string(),
             StatusSeverity::Success,
@@ -1006,14 +1010,14 @@ impl SigningApp {
         if let Some(ref psbt_data) = self.current_psbt {
             // Generate BBQr QR codes
             let generator = BBQrQrGenerator::new();
-            
+
             match generator.generate_parts(psbt_data, oxivault_qr::FileType::Transaction) {
                 Ok(qr_codes) => {
                     let ascii_codes: Vec<String> = qr_codes
                         .iter()
                         .map(|qr| AsciiQrRenderer::render_compact(qr))
                         .collect();
-                    
+
                     self.export_state = Some(PsbtExportState {
                         qr_codes: ascii_codes,
                         current_index: 0,

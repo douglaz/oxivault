@@ -1,16 +1,14 @@
 //! QR Code Import Module
-//! 
+//!
 //! Provides QR code import functionality with support for:
 //! - Single QR codes
 //! - BBQr multi-part codes
 //! - UR (Uniform Resources) format
 //! - Animated QR sequences
 
+use anyhow::{anyhow, Result};
+use oxivault_qr::BBQrDecoder;
 use std::time::{Duration, Instant};
-use oxivault_qr::{
-    BBQrDecoder,
-};
-use anyhow::{Result, anyhow};
 
 /// QR import state machine
 pub struct QrImporter {
@@ -133,7 +131,7 @@ impl QrImporter {
     fn process_single(&mut self, data: &str) -> Result<ImportStatus> {
         // Try to detect data type
         let data_type = Self::detect_data_type(data);
-        
+
         self.progress.complete = true;
         self.progress.received = 1;
         self.progress.total = Some(1);
@@ -154,7 +152,7 @@ impl QrImporter {
 
         if let Some(ref mut decoder) = self.bbqr_decoder {
             decoder.add_part(data).map_err(|e| anyhow!(e))?;
-            
+
             let (received, total) = decoder.progress();
             self.progress.received = received;
             self.progress.total = Some(total);
@@ -163,7 +161,7 @@ impl QrImporter {
                 let decoded = decoder.combine().map_err(|e| anyhow!(e))?;
                 self.progress.complete = true;
                 self.progress.data = Some(decoded.clone());
-                
+
                 // Detect type from decoded data
                 if let Ok(text) = String::from_utf8(decoded.clone()) {
                     self.progress.data_type = Some(Self::detect_data_type(&text));
@@ -190,7 +188,7 @@ impl QrImporter {
         // Full UR implementation would use fountain codes
         self.ur_parts.push(data.to_string());
         self.progress.received = self.ur_parts.len();
-        
+
         // Simple heuristic: assume we need at least a few parts
         if self.ur_parts.len() >= 3 {
             // Combine all parts (simplified)
@@ -198,13 +196,13 @@ impl QrImporter {
             self.progress.complete = true;
             self.progress.data = Some(combined.as_bytes().to_vec());
             self.progress.data_type = Some(DataType::Binary);
-            
+
             return Ok(ImportStatus::Complete {
                 data: combined.as_bytes().to_vec(),
                 data_type: DataType::Binary,
             });
         }
-        
+
         Ok(ImportStatus::PartReceived {
             received: self.progress.received,
             total: 0, // Unknown total for UR
@@ -240,7 +238,6 @@ impl QrImporter {
         // Default to text
         DataType::Text
     }
-
 
     /// Reset the importer
     pub fn reset(&mut self) {
@@ -325,7 +322,7 @@ impl QrScanner {
 
 // Helper function to decode base64 safely
 fn base64_decode(data: &str) -> std::result::Result<Vec<u8>, base64::DecodeError> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     STANDARD.decode(data)
 }
 
@@ -336,10 +333,11 @@ mod tests {
     #[test]
     fn test_single_qr_import() {
         let mut importer = QrImporter::new();
-        let test_data = "test mnemonic phrase with twelve words here for testing import functionality properly";
-        
+        let test_data =
+            "test mnemonic phrase with twelve words here for testing import functionality properly";
+
         let result = importer.process_part(test_data).unwrap();
-        
+
         match result {
             ImportStatus::Complete { data, data_type } => {
                 assert_eq!(String::from_utf8(data).unwrap(), test_data);
@@ -353,7 +351,10 @@ mod tests {
     fn test_data_type_detection() {
         // Test mnemonic detection
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-        assert!(matches!(QrImporter::detect_data_type(mnemonic), DataType::Mnemonic));
+        assert!(matches!(
+            QrImporter::detect_data_type(mnemonic),
+            DataType::Mnemonic
+        ));
 
         // Test XPUB detection
         let xpub = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
@@ -371,9 +372,9 @@ mod tests {
             "Part 2".to_string(),
             "Part 3".to_string(),
         ];
-        
+
         let mut scanner = QrScanner::new(codes);
-        
+
         assert!(scanner.has_more());
         assert_eq!(scanner.scan_next(), Some("Part 1".to_string()));
         assert_eq!(scanner.scan_next(), Some("Part 2".to_string()));

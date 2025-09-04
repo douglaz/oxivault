@@ -1,23 +1,26 @@
 //! Taproot (BIP-340/341/342) Implementation
-//! 
+//!
 //! Provides comprehensive Taproot support including:
 //! - Schnorr signatures (BIP-340)
 //! - Taproot key path spending
 //! - Tapscript and script path spending
 //! - MuSig2 preparation
 
+use crate::{Error, Result};
 use bitcoin::{
-    Address, Network, XOnlyPublicKey,
-    ScriptBuf,
-    secp256k1::{Secp256k1, Message, Keypair, SecretKey},
-    taproot::{TaprootBuilder, TaprootSpendInfo, LeafVersion, TapLeafHash},
-    sighash::{SighashCache, TapSighashType, Prevouts},
-    Transaction, TxOut,
+    secp256k1::{Keypair, Message, Secp256k1, SecretKey},
+    sighash::{Prevouts, SighashCache, TapSighashType},
+    taproot::{LeafVersion, TapLeafHash, TaprootBuilder, TaprootSpendInfo},
+    Address, Network, ScriptBuf, Transaction, TxOut, XOnlyPublicKey,
 };
-use crate::{Result, Error};
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec, string::{String, ToString}, format};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 /// Taproot key manager for BIP-341 operations
 pub struct TaprootKey {
@@ -34,7 +37,7 @@ impl TaprootKey {
     pub fn new(secret_key: SecretKey, network: Network) -> Self {
         let secp = Secp256k1::new();
         let keypair = Keypair::from_secret_key(&secp, &secret_key);
-        
+
         Self {
             keypair,
             network,
@@ -54,27 +57,37 @@ impl TaprootKey {
     }
 
     /// Create a Taproot address with a script tree
-    pub fn address_with_scripts(&self, scripts: Vec<ScriptBuf>) -> Result<(Address, TaprootSpendInfo)> {
+    pub fn address_with_scripts(
+        &self,
+        scripts: Vec<ScriptBuf>,
+    ) -> Result<(Address, TaprootSpendInfo)> {
         if scripts.is_empty() {
             return Err(Error::Taproot("No scripts provided".into()));
         }
 
         let internal_key = self.internal_key();
-        
+
         // Build Taproot tree
         let mut builder = TaprootBuilder::new();
-        
+
         // Add all scripts as leaves at the same depth (simple for now)
         for script in scripts {
-            builder = builder.add_leaf(0, script)
+            builder = builder
+                .add_leaf(0, script)
                 .map_err(|e| Error::Taproot(format!("Failed to add leaf: {:?}", e)))?;
         }
 
-        let spend_info = builder.finalize(&self.secp, internal_key)
+        let spend_info = builder
+            .finalize(&self.secp, internal_key)
             .map_err(|e| Error::Taproot(format!("Failed to finalize taproot: {:?}", e)))?;
-        
-        let address = Address::p2tr(&self.secp, internal_key, spend_info.merkle_root(), self.network);
-        
+
+        let address = Address::p2tr(
+            &self.secp,
+            internal_key,
+            spend_info.merkle_root(),
+            self.network,
+        );
+
         Ok((address, spend_info))
     }
 
@@ -87,22 +100,22 @@ impl TaprootKey {
         sighash_type: Option<TapSighashType>,
     ) -> Result<bitcoin::taproot::Signature> {
         let sighash_type = sighash_type.unwrap_or(TapSighashType::Default);
-        
+
         // Create sighash cache
         let mut cache = SighashCache::new(tx);
         let prevouts = Prevouts::All(prevouts);
-        
+
         // Calculate sighash
         let sighash = cache
             .taproot_key_spend_signature_hash(input_index, &prevouts, sighash_type)
             .map_err(|e| Error::Taproot(format!("Failed to calculate sighash: {:?}", e)))?;
-        
+
         let msg = Message::from_digest_slice(&sighash[..])
             .map_err(|e| Error::Taproot(format!("Invalid message: {:?}", e)))?;
-        
+
         // Create Schnorr signature
         let sig = self.secp.sign_schnorr_no_aux_rand(&msg, &self.keypair);
-        
+
         Ok(bitcoin::taproot::Signature {
             signature: sig,
             sighash_type,
@@ -119,22 +132,22 @@ impl TaprootKey {
         sighash_type: Option<TapSighashType>,
     ) -> Result<bitcoin::taproot::Signature> {
         let sighash_type = sighash_type.unwrap_or(TapSighashType::Default);
-        
+
         // Create sighash cache
         let mut cache = SighashCache::new(tx);
         let prevouts = Prevouts::All(prevouts);
-        
+
         // Calculate script path sighash
         let sighash = cache
             .taproot_script_spend_signature_hash(input_index, &prevouts, leaf_hash, sighash_type)
             .map_err(|e| Error::Taproot(format!("Failed to calculate script sighash: {:?}", e)))?;
-        
+
         let msg = Message::from_digest_slice(&sighash[..])
             .map_err(|e| Error::Taproot(format!("Invalid message: {:?}", e)))?;
-        
+
         // Create Schnorr signature
         let sig = self.secp.sign_schnorr_no_aux_rand(&msg, &self.keypair);
-        
+
         Ok(bitcoin::taproot::Signature {
             signature: sig,
             sighash_type,
@@ -192,18 +205,20 @@ impl TaprootDescriptor {
         }
 
         let mut builder = TaprootBuilder::new();
-        
+
         for leaf in &self.leaves {
-            builder = builder.add_leaf(leaf.depth, leaf.script.clone())
+            builder = builder
+                .add_leaf(leaf.depth, leaf.script.clone())
                 .map_err(|e| Error::Taproot(format!("Failed to add leaf: {:?}", e)))?;
         }
 
-        let spend_info = builder.finalize(secp, self.internal_key)
+        let spend_info = builder
+            .finalize(secp, self.internal_key)
             .map_err(|e| Error::Taproot(format!("Failed to finalize: {:?}", e)))?;
-        
+
         let address = Address::p2tr(secp, self.internal_key, spend_info.merkle_root(), network);
         self.spend_info = Some(spend_info);
-        
+
         Ok(address)
     }
 
@@ -285,7 +300,7 @@ mod tests {
     fn test_taproot_simple_address() {
         let secret_key = SecretKey::from_slice(&[0x01; 32]).unwrap();
         let taproot_key = TaprootKey::new(secret_key, Network::Bitcoin);
-        
+
         let address = taproot_key.simple_address();
         assert!(address.to_string().starts_with("bc1p"));
     }
@@ -294,13 +309,15 @@ mod tests {
     fn test_taproot_with_scripts() {
         let secret_key = SecretKey::from_slice(&[0x02; 32]).unwrap();
         let taproot_key = TaprootKey::new(secret_key, Network::Bitcoin);
-        
+
         // Create some dummy scripts
         let script1 = ScriptBuf::from_bytes(vec![0x51]); // OP_1
         let script2 = ScriptBuf::from_bytes(vec![0x52]); // OP_2
-        
-        let (address, spend_info) = taproot_key.address_with_scripts(vec![script1, script2]).unwrap();
-        
+
+        let (address, spend_info) = taproot_key
+            .address_with_scripts(vec![script1, script2])
+            .unwrap();
+
         assert!(address.to_string().starts_with("bc1p"));
         assert!(spend_info.merkle_root().is_some());
     }
@@ -311,10 +328,10 @@ mod tests {
         let secp = Secp256k1::new();
         let keypair = Keypair::from_secret_key(&secp, &secret_key);
         let (xonly, _) = keypair.x_only_public_key();
-        
+
         let mut descriptor = TaprootDescriptor::new(xonly);
         descriptor.add_leaf(0, ScriptBuf::from_bytes(vec![0x51]));
-        
+
         let address = descriptor.build(&secp, Network::Bitcoin).unwrap();
         assert!(address.to_string().starts_with("bc1p"));
     }
@@ -323,16 +340,16 @@ mod tests {
     fn test_musig2_coordinator() {
         let key1 = XOnlyPublicKey::from_slice(&[0x02; 32]).unwrap();
         let key2 = XOnlyPublicKey::from_slice(&[0x03; 32]).unwrap();
-        
+
         let mut coordinator = MuSig2Coordinator::new(vec![key1, key2]);
         let aggregate = coordinator.aggregate_pubkeys().unwrap();
-        
+
         assert_eq!(aggregate, key1); // Simplified implementation returns first key
-        
+
         // Add signatures
         coordinator.add_partial_signature(0, [0x01; 64]).unwrap();
         assert!(!coordinator.is_complete());
-        
+
         coordinator.add_partial_signature(1, [0x02; 64]).unwrap();
         assert!(coordinator.is_complete());
     }

@@ -1,23 +1,29 @@
 //! Multisig Coordination Module
-//! 
+//!
 //! Provides comprehensive multisig support including:
 //! - PSBT round coordination
 //! - Cosigner management
 //! - Signature collection and validation
 //! - Various multisig configurations (2-of-3, 3-of-5, etc.)
 
+use crate::{Error, Result};
 use bitcoin::{
-    Address, Network, PublicKey, ScriptBuf,
-    bip32::{Xpub, Fingerprint, DerivationPath},
-    psbt::Psbt,
-    blockdata::script::Builder,
+    bip32::{DerivationPath, Fingerprint, Xpub},
     blockdata::opcodes,
+    blockdata::script::Builder,
+    psbt::Psbt,
     secp256k1::Secp256k1,
+    Address, Network, PublicKey, ScriptBuf,
 };
-use crate::{Result, Error};
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec, string::{String, ToString}, format, collections::BTreeMap};
+use alloc::{
+    collections::BTreeMap,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
@@ -71,14 +77,16 @@ impl MultisigConfig {
         script_type: MultisigScriptType,
     ) -> Result<Self> {
         if threshold == 0 || threshold > cosigners.len() {
-            return Err(Error::InvalidParameter(
-                format!("Invalid threshold {} for {} cosigners", threshold, cosigners.len())
-            ));
+            return Err(Error::InvalidParameter(format!(
+                "Invalid threshold {} for {} cosigners",
+                threshold,
+                cosigners.len()
+            )));
         }
 
         if cosigners.len() > 20 {
             return Err(Error::InvalidParameter(
-                "Maximum 20 cosigners supported".to_string()
+                "Maximum 20 cosigners supported".to_string(),
             ));
         }
 
@@ -94,14 +102,15 @@ impl MultisigConfig {
     /// Derive address at a specific path
     pub fn derive_address(&self, change: u32, index: u32) -> Result<Address> {
         let secp = Secp256k1::new();
-        
+
         // Derive public keys for all cosigners
         let mut pubkeys: Vec<bitcoin::PublicKey> = Vec::new();
         for cosigner in &self.cosigners {
-            let child = cosigner.xpub
+            let child = cosigner
+                .xpub
                 .derive_pub(&secp, &[change.into(), index.into()])
                 .map_err(|_| Error::InvalidDerivationPath(format!("{}/{}", change, index)))?;
-            
+
             pubkeys.push(bitcoin::PublicKey::new(child.public_key));
         }
 
@@ -110,27 +119,27 @@ impl MultisigConfig {
 
         // Create multisig script
         let script = self.create_multisig_script(pubkeys.as_slice())?;
-        
+
         // Convert to address based on script type
         match self.script_type {
-            MultisigScriptType::P2sh => {
-                Address::p2sh(&script, self.network)
-                    .map_err(|e| Error::BitcoinError(format!("Failed to create P2SH address: {:?}", e)))
-            },
+            MultisigScriptType::P2sh => Address::p2sh(&script, self.network).map_err(|e| {
+                Error::BitcoinError(format!("Failed to create P2SH address: {:?}", e))
+            }),
             MultisigScriptType::P2shP2wsh => {
                 // Create P2WSH script first, then wrap in P2SH
                 let witness_script = script;
                 let p2wsh = Address::p2wsh(&witness_script, self.network);
-                Address::p2sh(&p2wsh.script_pubkey(), self.network)
-                    .map_err(|e| Error::BitcoinError(format!("Failed to create P2SH-P2WSH address: {:?}", e)))
-            },
-            MultisigScriptType::P2wsh => {
-                Ok(Address::p2wsh(&script, self.network))
-            },
+                Address::p2sh(&p2wsh.script_pubkey(), self.network).map_err(|e| {
+                    Error::BitcoinError(format!("Failed to create P2SH-P2WSH address: {:?}", e))
+                })
+            }
+            MultisigScriptType::P2wsh => Ok(Address::p2wsh(&script, self.network)),
             MultisigScriptType::P2tr => {
                 // Taproot multisig requires MuSig2 or script path
                 // For now, return error
-                Err(Error::InvalidParameter("Taproot multisig not yet implemented".to_string()))
+                Err(Error::InvalidParameter(
+                    "Taproot multisig not yet implemented".to_string(),
+                ))
             }
         }
     }
@@ -138,21 +147,21 @@ impl MultisigConfig {
     /// Create multisig redeem script
     fn create_multisig_script(&self, pubkeys: &[PublicKey]) -> Result<ScriptBuf> {
         let mut builder = Builder::new();
-        
+
         // Add threshold
         builder = builder.push_int(self.threshold as i64);
-        
+
         // Add all public keys
         for pubkey in pubkeys {
             builder = builder.push_key(pubkey);
         }
-        
+
         // Add total number
         builder = builder.push_int(pubkeys.len() as i64);
-        
+
         // Add CHECKMULTISIG
         builder = builder.push_opcode(opcodes::all::OP_CHECKMULTISIG);
-        
+
         Ok(builder.into_script())
     }
 
@@ -164,26 +173,28 @@ impl MultisigConfig {
             MultisigScriptType::P2wsh => "wsh(multi(".to_string(),
             MultisigScriptType::P2tr => "tr(musig(".to_string(),
         };
-        
+
         desc.push_str(&self.threshold.to_string());
-        
+
         for cosigner in &self.cosigners {
             desc.push(',');
-            desc.push_str(&format!("[{}/{}]{}/<0;1>/*", 
-                cosigner.fingerprint,
-                cosigner.derivation,
-                cosigner.xpub
+            desc.push_str(&format!(
+                "[{}/{}]{}/<0;1>/*",
+                cosigner.fingerprint, cosigner.derivation, cosigner.xpub
             ));
         }
-        
+
         desc.push(')');
         if matches!(self.script_type, MultisigScriptType::P2shP2wsh) {
             desc.push(')');
         }
-        if matches!(self.script_type, MultisigScriptType::P2sh | MultisigScriptType::P2shP2wsh) {
+        if matches!(
+            self.script_type,
+            MultisigScriptType::P2sh | MultisigScriptType::P2shP2wsh
+        ) {
             desc.push(')');
         }
-        
+
         desc
     }
 }
@@ -216,7 +227,7 @@ impl PsbtCoordinator {
     pub fn new(config: MultisigConfig, psbt: Psbt) -> Self {
         let num_inputs = psbt.unsigned_tx.input.len();
         let mut signature_status = Vec::with_capacity(num_inputs);
-        
+
         for _ in 0..num_inputs {
             signature_status.push(InputSignatureStatus {
                 required: config.threshold,
@@ -224,7 +235,7 @@ impl PsbtCoordinator {
                 is_complete: false,
             });
         }
-        
+
         Self {
             config,
             psbt,
@@ -247,15 +258,11 @@ impl PsbtCoordinator {
             // Extract partial signatures
             for (pubkey, sig) in &input.partial_sigs {
                 // Find which cosigner this belongs to
-                let fingerprint = self.find_cosigner_by_pubkey(pubkey)
-                    .map(|c| c.fingerprint);
-                
+                let fingerprint = self.find_cosigner_by_pubkey(pubkey).map(|c| c.fingerprint);
+
                 if let Some(fp) = fingerprint {
-                    self.signature_status[i].signatures.insert(
-                        fp,
-                        sig.to_vec(),
-                    );
-                    
+                    self.signature_status[i].signatures.insert(fp, sig.to_vec());
+
                     // Check if input is complete
                     if self.signature_status[i].signatures.len() >= self.config.threshold {
                         self.signature_status[i].is_complete = true;
@@ -275,7 +282,11 @@ impl PsbtCoordinator {
 
     /// Get signature progress
     pub fn progress(&self) -> (usize, usize) {
-        let complete = self.signature_status.iter().filter(|s| s.is_complete).count();
+        let complete = self
+            .signature_status
+            .iter()
+            .filter(|s| s.is_complete)
+            .count();
         let total = self.signature_status.len();
         (complete, total)
     }
@@ -283,7 +294,9 @@ impl PsbtCoordinator {
     /// Combine all signatures into final PSBT
     pub fn finalize(&mut self) -> Result<Psbt> {
         if !self.is_complete() {
-            return Err(Error::PsbtError("Not all inputs are fully signed".to_string()));
+            return Err(Error::PsbtError(
+                "Not all inputs are fully signed".to_string(),
+            ));
         }
 
         // Combine signatures into PSBT inputs
@@ -295,8 +308,12 @@ impl PsbtCoordinator {
             // Add all collected signatures
             for (fingerprint, sig) in &status.signatures {
                 // Find the public key for this fingerprint
-                if let Some(cosigner) = self.config.cosigners.iter()
-                    .find(|c| c.fingerprint == *fingerprint) {
+                if let Some(cosigner) = self
+                    .config
+                    .cosigners
+                    .iter()
+                    .find(|c| c.fingerprint == *fingerprint)
+                {
                     // This is simplified - real implementation needs proper key derivation
                     // and signature format handling
                 }
@@ -379,9 +396,10 @@ impl MultisigBuilder {
 
     /// Build the multisig configuration
     pub fn build(self) -> Result<MultisigConfig> {
-        let threshold = self.threshold
+        let threshold = self
+            .threshold
             .ok_or_else(|| Error::InvalidParameter("Threshold not set".to_string()))?;
-        
+
         MultisigConfig::new(threshold, self.cosigners, self.network, self.script_type)
     }
 }
@@ -402,35 +420,36 @@ mod tests {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
         ).unwrap();
-        
+
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
         let fingerprint = xprv.fingerprint(&secp);
-        
+
         let cosigner1 = CosignerInfo {
             name: "Alice".to_string(),
             fingerprint,
             xpub: xpub.clone(),
             derivation: DerivationPath::master(),
         };
-        
+
         let cosigner2 = CosignerInfo {
             name: "Bob".to_string(),
             fingerprint,
             xpub: xpub.clone(),
             derivation: DerivationPath::master(),
         };
-        
+
         let config = MultisigConfig::new(
             2,
             vec![cosigner1, cosigner2],
             Network::Bitcoin,
             MultisigScriptType::P2wsh,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(config.threshold, 2);
         assert_eq!(config.total, 2);
-        
+
         // Test address derivation
         let address = config.derive_address(0, 0).unwrap();
         assert!(address.to_string().starts_with("bc1"));
@@ -441,11 +460,11 @@ mod tests {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
         ).unwrap();
-        
+
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
         let fingerprint = xprv.fingerprint(&secp);
-        
+
         let config = MultisigBuilder::new()
             .threshold(2)
             .add_cosigner(
@@ -470,7 +489,7 @@ mod tests {
             .script_type(MultisigScriptType::P2wsh)
             .build()
             .unwrap();
-        
+
         assert_eq!(config.threshold, 2);
         assert_eq!(config.total, 3);
         assert_eq!(config.cosigners.len(), 3);
@@ -481,11 +500,11 @@ mod tests {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
         ).unwrap();
-        
+
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
         let fingerprint = xprv.fingerprint(&secp);
-        
+
         let config = MultisigBuilder::new()
             .threshold(2)
             .add_cosigner(
@@ -504,7 +523,7 @@ mod tests {
             .script_type(MultisigScriptType::P2wsh)
             .build()
             .unwrap();
-        
+
         let descriptor = config.descriptor();
         assert!(descriptor.starts_with("wsh(multi(2,"));
         assert!(descriptor.contains("/<0;1>/*"));

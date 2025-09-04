@@ -9,8 +9,7 @@ use ratatui::{
 };
 
 use oxivault_qr::{
-    BBQrQrGenerator, BBQrAnimator, BBQrScanner, ScanResult, FileType,
-    QrGenerator, AsciiQrRenderer,
+    AsciiQrRenderer, BBQrAnimator, BBQrQrGenerator, BBQrScanner, FileType, QrGenerator, ScanResult,
 };
 
 use crossterm::event::KeyCode;
@@ -38,28 +37,29 @@ impl PsbtExportState {
             ..Default::default()
         }
     }
-    
+
     /// Generate BBQr codes for PSBT data
     pub fn generate_for_psbt(&mut self, psbt_bytes: &[u8]) -> Result<(), String> {
         let generator = BBQrQrGenerator::new();
-        
+
         // Generate QR codes
-        let qr_codes = generator.generate_psbt_qrs(psbt_bytes)
+        let qr_codes = generator
+            .generate_psbt_qrs(psbt_bytes)
             .map_err(|e| format!("Failed to generate QR codes: {}", e))?;
-        
+
         // Convert to ASCII for terminal display
         self.qr_codes.clear();
         for qr in qr_codes {
             let ascii = AsciiQrRenderer::render_compact(&qr);
             self.qr_codes.push(ascii);
         }
-        
+
         self.current_index = 0;
         self.last_advance = Some(Instant::now());
-        
+
         Ok(())
     }
-    
+
     /// Auto-advance to next QR if enough time has passed
     pub fn maybe_advance(&mut self) {
         if let Some(last) = self.last_advance {
@@ -69,14 +69,14 @@ impl PsbtExportState {
             }
         }
     }
-    
+
     /// Move to next QR code
     pub fn next(&mut self) {
         if !self.qr_codes.is_empty() {
             self.current_index = (self.current_index + 1) % self.qr_codes.len();
         }
     }
-    
+
     /// Move to previous QR code
     pub fn prev(&mut self) {
         if !self.qr_codes.is_empty() {
@@ -87,7 +87,7 @@ impl PsbtExportState {
             }
         }
     }
-    
+
     /// Toggle grid view
     pub fn toggle_grid(&mut self) {
         self.show_grid = !self.show_grid;
@@ -102,15 +102,15 @@ pub fn draw_psbt_export(state: &PsbtExportState, f: &mut Frame, area: Rect) {
             Line::from(""),
             Line::from("Press ESC to go back"),
         ];
-        
+
         let paragraph = Paragraph::new(text)
             .block(Block::default().borders(Borders::ALL).title("PSBT Export"))
             .alignment(Alignment::Center);
-        
+
         f.render_widget(paragraph, area);
         return;
     }
-    
+
     if state.show_grid && state.qr_codes.len() > 1 {
         // Show all QR codes in a grid
         draw_qr_grid(state, f, area);
@@ -125,12 +125,12 @@ fn draw_animated_qr(state: &PsbtExportState, f: &mut Frame, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(5),     // QR Code
-            Constraint::Length(4),  // Controls
+            Constraint::Length(3), // Header
+            Constraint::Min(5),    // QR Code
+            Constraint::Length(4), // Controls
         ])
         .split(area);
-    
+
     // Header with progress
     let header = format!(
         "PSBT Export - Part {}/{} (BBQr)",
@@ -138,11 +138,15 @@ fn draw_animated_qr(state: &PsbtExportState, f: &mut Frame, area: Rect) {
         state.qr_codes.len()
     );
     let header_widget = Paragraph::new(header)
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(header_widget, chunks[0]);
-    
+
     // QR Code display
     if let Some(qr_ascii) = state.qr_codes.get(state.current_index) {
         let lines: Vec<Line> = qr_ascii.lines().map(|l| Line::from(l)).collect();
@@ -151,15 +155,18 @@ fn draw_animated_qr(state: &PsbtExportState, f: &mut Frame, area: Rect) {
             .block(Block::default().borders(Borders::ALL));
         f.render_widget(qr_widget, chunks[1]);
     }
-    
+
     // Controls
     let controls = vec![
         Line::from(""),
         Line::from("← Previous | → Next | Space: Pause | G: Grid View"),
-        Line::from(format!("Auto-advance: {}ms | +/- to adjust", state.animation_speed)),
+        Line::from(format!(
+            "Auto-advance: {}ms | +/- to adjust",
+            state.animation_speed
+        )),
         Line::from("ESC: Back"),
     ];
-    
+
     let controls_widget = Paragraph::new(controls)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
@@ -171,24 +178,28 @@ fn draw_qr_grid(state: &PsbtExportState, f: &mut Frame, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(5),     // Grid
-            Constraint::Length(3),  // Controls
+            Constraint::Length(3), // Header
+            Constraint::Min(5),    // Grid
+            Constraint::Length(3), // Controls
         ])
         .split(area);
-    
+
     // Header
     let header = format!("PSBT Export - {} parts (Grid View)", state.qr_codes.len());
     let header_widget = Paragraph::new(header)
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(header_widget, chunks[0]);
-    
+
     // Calculate grid layout
     let cols = ((state.qr_codes.len() as f32).sqrt().ceil()) as usize;
     let rows = (state.qr_codes.len() + cols - 1) / cols;
-    
+
     // Create row chunks
     let row_constraints: Vec<Constraint> = (0..rows)
         .map(|_| Constraint::Ratio(1, rows as u32))
@@ -197,7 +208,7 @@ fn draw_qr_grid(state: &PsbtExportState, f: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints(&row_constraints)
         .split(chunks[1]);
-    
+
     // Draw QR codes in grid
     let mut qr_idx = 0;
     for row_chunk in row_chunks.iter() {
@@ -208,24 +219,20 @@ fn draw_qr_grid(state: &PsbtExportState, f: &mut Frame, area: Rect) {
             .direction(Direction::Horizontal)
             .constraints(&col_constraints)
             .split(*row_chunk);
-        
+
         for col_chunk in col_chunks.iter() {
             if qr_idx < state.qr_codes.len() {
                 if let Some(qr_ascii) = state.qr_codes.get(qr_idx) {
                     // Make smaller QR for grid
                     let lines: Vec<Line> = qr_ascii
                         .lines()
-                        .take(10)  // Limit height in grid
+                        .take(10) // Limit height in grid
                         .map(|l| {
-                            let truncated = if l.len() > 20 {
-                                &l[..20]
-                            } else {
-                                l
-                            };
+                            let truncated = if l.len() > 20 { &l[..20] } else { l };
                             Line::from(truncated)
                         })
                         .collect();
-                    
+
                     let title = format!("Part {}", qr_idx + 1);
                     let qr_widget = Paragraph::new(lines)
                         .alignment(Alignment::Center)
@@ -236,12 +243,10 @@ fn draw_qr_grid(state: &PsbtExportState, f: &mut Frame, area: Rect) {
             }
         }
     }
-    
+
     // Controls
-    let controls = vec![
-        Line::from("G: Single View | ESC: Back"),
-    ];
-    
+    let controls = vec![Line::from("G: Single View | ESC: Back")];
+
     let controls_widget = Paragraph::new(controls)
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
@@ -304,7 +309,7 @@ impl QrImportState {
             error_message: None,
         }
     }
-    
+
     /// Process a scanned QR code string
     pub fn scan_qr(&mut self, qr_data: &str) -> Result<(), String> {
         match self.scanner.scan(qr_data) {
@@ -313,7 +318,8 @@ impl QrImportState {
                 Ok(())
             }
             Ok(ScanResult::Progress { received, total }) => {
-                self.scanned_parts.push(format!("Part {}/{} scanned", received, total));
+                self.scanned_parts
+                    .push(format!("Part {}/{} scanned", received, total));
                 Ok(())
             }
             Ok(ScanResult::Duplicate) => {
@@ -326,12 +332,12 @@ impl QrImportState {
             }
         }
     }
-    
+
     /// Get progress
     pub fn progress(&self) -> (usize, usize) {
         self.scanner.progress()
     }
-    
+
     /// Reset scanner
     pub fn reset(&mut self) {
         self.scanner = BBQrScanner::new();
@@ -344,27 +350,27 @@ impl QrImportState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_psbt_export_state() {
         let mut state = PsbtExportState::new();
         let test_data = b"test psbt data";
-        
+
         assert!(state.generate_for_psbt(test_data).is_ok());
         assert!(!state.qr_codes.is_empty());
-        
+
         let initial = state.current_index;
         state.next();
         if state.qr_codes.len() > 1 {
             assert_ne!(state.current_index, initial);
         }
     }
-    
+
     #[test]
     fn test_qr_import_state() {
         let mut state = QrImportState::new();
         assert_eq!(state.progress(), (0, 0));
-        
+
         // Would need actual BBQr data to test scanning
         state.reset();
         assert_eq!(state.progress(), (0, 0));
