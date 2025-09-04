@@ -1,0 +1,33 @@
+[package]
+name = "oxivault-simulator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "oxivault-sim"
+path = "src/main.rs"
+
+[dependencies]
+oxivault-core = { path = "../oxivault-core" }
+oxivault-qr = { path = "../oxivault-qr" }
+
+# CLI and UI
+clap = { version = "4.5", features = ["derive"] }
+ratatui = "0.28"
+crossterm = "0.28"
+
+# Async runtime for desktop
+tokio = { version = "1.40", features = ["full"] }
+
+# QR code display
+qrcode = "0.14"
+image = "0.25"
+hex = "0.4"
+base64 = "0.22"
+anyhow = "1.0"
+
+[lib]
+name = "oxivault_simulator"
+path = "src/lib.rs"
