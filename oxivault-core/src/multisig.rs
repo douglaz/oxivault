@@ -418,7 +418,7 @@ mod tests {
     fn test_multisig_config() -> Result<()> {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-        )?;
+        ).map_err(|e| Error::BitcoinError(format!("Invalid xprv: {e:?}")))?;
 
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
@@ -459,7 +459,7 @@ mod tests {
     fn test_multisig_builder() -> Result<()> {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-        )?;
+        ).map_err(|e| Error::BitcoinError(format!("Invalid xprv: {e:?}")))?;
 
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
@@ -500,7 +500,7 @@ mod tests {
     fn test_descriptor_generation() -> Result<()> {
         let xprv = ExtendedPrivKey::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-        )?;
+        ).map_err(|e| Error::BitcoinError(format!("Invalid xprv: {e:?}")))?;
 
         let secp = Secp256k1::new();
         let xpub = Xpub::from_priv(&secp, &xprv);
@@ -512,13 +512,15 @@ mod tests {
                 "Alice".to_string(),
                 fingerprint,
                 xpub.clone(),
-                DerivationPath::from_str("m/48'/0'/0'/2'")?,
+                DerivationPath::from_str("m/48'/0'/0'/2'")
+                    .map_err(|e| Error::InvalidDerivationPath(format!("Invalid path: {e:?}")))?,
             )
             .add_cosigner(
                 "Bob".to_string(),
                 fingerprint,
                 xpub,
-                DerivationPath::from_str("m/48'/0'/0'/2'")?,
+                DerivationPath::from_str("m/48'/0'/0'/2'")
+                    .map_err(|e| Error::InvalidDerivationPath(format!("Invalid path: {e:?}")))?,
             )
             .network(Network::Bitcoin)
             .script_type(MultisigScriptType::P2wsh)
