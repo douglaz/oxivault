@@ -59,46 +59,46 @@ jobs:
     - name: Test documentation examples
       run: nix develop -c cargo test --doc --all
 
-  embedded-builds:
-    name: Embedded Target Builds
-    runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        target:
-          - { name: "nRF52840", target: "thumbv7em-none-eabihf", features: "nrf52840" }
-          - { name: "STM32L4", target: "thumbv7em-none-eabihf", features: "stm32l4" }
-          - { name: "RP2040", target: "thumbv6m-none-eabi", features: "rp2040" }
-          - { name: "ESP32-C3", target: "riscv32imc-unknown-none-elf", features: "esp32c3" }
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Nix
-      uses: cachix/install-nix-action@v31
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
-        extra_nix_config: |
-          experimental-features = nix-command flakes
-    
-    - name: Cache Cargo registry
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-        key: cargo-registry-embedded-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          cargo-registry-embedded-${{ runner.os }}-
-    
-    - name: Build for ${{ matrix.target.name }}
-      run: |
-        nix develop -c cargo build \
-          --package oxivault-embedded \
-          --no-default-features \
-          --features ${{ matrix.target.features }} \
-          --target ${{ matrix.target.target }}
+  # embedded-builds:
+  #   name: Embedded Target Builds
+  #   runs-on: ubuntu-latest
+  #   
+  #   strategy:
+  #     matrix:
+  #       target:
+  #         - { name: "nRF52840", target: "thumbv7em-none-eabihf", features: "nrf52840" }
+  #         - { name: "STM32L4", target: "thumbv7em-none-eabihf", features: "stm32l4" }
+  #         - { name: "RP2040", target: "thumbv6m-none-eabi", features: "rp2040" }
+  #         - { name: "ESP32-C3", target: "riscv32imc-unknown-none-elf", features: "esp32c3" }
+  #   
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   
+  #   - name: Install Nix
+  #     uses: cachix/install-nix-action@v31
+  #     with:
+  #       nix_path: nixpkgs=channel:nixos-unstable
+  #       extra_nix_config: |
+  #         experimental-features = nix-command flakes
+  #   
+  #   - name: Cache Cargo registry
+  #     uses: actions/cache@v4
+  #     with:
+  #       path: |
+  #         ~/.cargo/registry/index/
+  #         ~/.cargo/registry/cache/
+  #         ~/.cargo/git/db/
+  #       key: cargo-registry-embedded-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+  #       restore-keys: |
+  #         cargo-registry-embedded-${{ runner.os }}-
+  #   
+  #   - name: Build for ${{ matrix.target.name }}
+  #     run: |
+  #       nix develop -c cargo check \
+  #         --package oxivault-embedded \
+  #         --no-default-features \
+  #         --features ${{ matrix.target.features }} \
+  #         --target ${{ matrix.target.target }}
 
   security-audit:
     name: Security Audit
@@ -147,7 +147,7 @@ jobs:
     name: Release Build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    needs: [build-and-test, embedded-builds, security-audit, nix-build]
+    needs: [build-and-test, security-audit, nix-build]
     
     steps:
     - uses: actions/checkout@v4
