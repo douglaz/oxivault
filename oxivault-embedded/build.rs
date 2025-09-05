@@ -14,4 +14,9 @@ fn main() {
 
     // Re-run if memory.x changes
     println!("cargo:rerun-if-changed=memory.x");
+
+    // cortex-m-rt expects to find device.x in the search path
+    // We'll create a minimal device.x that includes memory.x
+    let device_x = "INCLUDE memory.x";
+    fs::write(out.join("device.x"), device_x).ok();
 }

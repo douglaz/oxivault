@@ -10,7 +10,7 @@ oxivault-core = { path = "../oxivault-core", default-features = false }
 oxivault-qr = { path = "../oxivault-qr", default-features = false, optional = true }
 bitcoin = { workspace = true }
 
-embassy-executor = { workspace = true, features = ["arch-cortex-m", "executor-thread", "integrated-timers", "defmt"] }
+embassy-executor = { workspace = true, features = ["arch-cortex-m", "executor-thread"] }
 embassy-time = { workspace = true }
 embassy-sync = { workspace = true }
 embedded-hal = { workspace = true }
@@ -23,23 +23,25 @@ embedded-graphics-core = { version = "0.4", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 static_cell = { version = "2.1", optional = true }
 embedded-alloc = { version = "0.5", optional = true }
+critical-section = { version = "1.1", optional = true }
 
 # Platform-specific dependencies (choose one when building)
-embassy-nrf = { version = "0.2", optional = true, default-features = false, features = ["nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac"] }
-embassy-usb = { version = "0.3", optional = true, default-features = false }
-embassy-stm32 = { version = "0.1", optional = true, default-features = false }
-embassy-rp = { version = "0.2", optional = true, default-features = false, features = ["unstable-pac", "time-driver"] }
-esp-hal = { version = "0.22", optional = true, default-features = false }
-cortex-m = { version = "0.7", optional = true }
-cortex-m-rt = { version = "0.7", optional = true, features = ["device"] }
+embassy-nrf = { version = "0.7", optional = true, default-features = false, features = ["nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac"] }
+embassy-usb = { version = "0.5", optional = true, default-features = false }
+# Temporarily disabled to resolve version conflicts
+# embassy-stm32 = { version = "0.4", optional = true, default-features = false }
+# embassy-rp = { version = "0.3", optional = true, default-features = false, features = ["unstable-pac", "time-driver"] }
+# esp-hal = { version = "1.0.0-rc.0", optional = true, default-features = false }
+cortex-m = { version = "0.7", optional = true, features = ["critical-section-single-core"] }
+cortex-m-rt = { version = "0.7", optional = true }
 
 [features]
 default = []
 qr = ["oxivault-qr"]
-nrf52840 = ["embassy-nrf", "embassy-usb", "cortex-m", "cortex-m-rt", "static_cell", "embedded-alloc"]
-stm32l4 = ["embassy-stm32", "cortex-m", "cortex-m-rt"]
-rp2040 = ["embassy-rp", "cortex-m", "cortex-m-rt"]
-esp32c3 = ["esp-hal"]
+nrf52840 = ["embassy-nrf", "embassy-usb", "cortex-m", "cortex-m-rt", "static_cell", "embedded-alloc", "critical-section/restore-state-bool"]
+# stm32l4 = ["embassy-stm32", "cortex-m", "cortex-m-rt"]
+# rp2040 = ["embassy-rp", "cortex-m", "cortex-m-rt"]
+# esp32c3 = ["esp-hal"]
 
 [lib]
 name = "oxivault_embedded"

@@ -11,21 +11,23 @@ use crate::{
     },
 };
 use defmt::*;
-use embassy_nrf::bind_interrupts;
+use embassy_nrf::{bind_interrupts, peripherals::TWISPI0 as TWIM0, Peri};
 use embassy_nrf::{
     gpio::{Input, Pull},
     peripherals,
+    peripherals::TWISPI0,
     twim::{self, Twim},
     usb::{self, vbus_detect, Driver},
 };
 use embassy_time::Timer;
 use heapless::String;
+use static_cell::StaticCell;
 
 // Bind interrupts for peripherals
 bind_interrupts!(struct Irqs {
-    SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => twim::InterruptHandler<peripherals::TWISPI0>;
+    TWISPI0 => twim::InterruptHandler<peripherals::TWISPI0>;
     USBD => usb::InterruptHandler<peripherals::USBD>;
-    POWER_CLOCK => usb::vbus_detect::InterruptHandler;
+    CLOCK_POWER => usb::vbus_detect::InterruptHandler;
 });
 
 /// Dummy SPI/CS types for storage (not implemented yet)
@@ -64,25 +66,29 @@ pub struct Nrf52840Hal {
     display: Option<Nrf52840Display>,
     buttons: ButtonArray,
     storage: Option<SdCard<DummySpi, DummyCs>>,
-    secure_element: Option<Atecc608a<Twim<'static, peripherals::TWISPI0>>>,
+    secure_element: Option<Atecc608a<Twim<'static, TWIM0>>>,
 }
+
+// Static buffer for TWIM DMA operations
+static TWIM_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 
 impl Nrf52840Hal {
     /// Initialize the HAL with peripherals
     pub async fn init(
-        p: peripherals::TWISPI0,
-        sda_pin: peripherals::P0_26,
-        scl_pin: peripherals::P0_27,
-        button1_pin: peripherals::P0_11,
-        button2_pin: peripherals::P0_12,
-        button3_pin: peripherals::P0_24,
-        button4_pin: peripherals::P0_25,
+        p: Peri<'static, peripherals::TWISPI0>,
+        sda_pin: Peri<'static, peripherals::P0_26>,
+        scl_pin: Peri<'static, peripherals::P0_27>,
+        button1_pin: Peri<'static, peripherals::P0_11>,
+        button2_pin: Peri<'static, peripherals::P0_12>,
+        button3_pin: Peri<'static, peripherals::P0_24>,
+        button4_pin: Peri<'static, peripherals::P0_25>,
     ) -> Self {
         info!("Initializing nRF52840 HAL");
 
         // Configure I2C for display
         let config = twim::Config::default();
-        let twim = Twim::new(p, Irqs, sda_pin, scl_pin, config);
+        let twim_buf = TWIM_BUF.init([0u8; 256]);
+        let twim = Twim::new(p, Irqs, sda_pin, scl_pin, config, twim_buf);
 
         // Initialize SSD1306 display
         let i2c_interface = I2cInterface::new(twim, 0x3C); // Common I2C address
@@ -388,7 +394,7 @@ where
 
 /// USB implementation for nRF52840
 pub fn init_usb(
-    p: peripherals::USBD,
+    p: Peri<'static, peripherals::USBD>,
 ) -> Driver<'static, peripherals::USBD, vbus_detect::HardwareVbusDetect> {
     // Create USB driver
     Driver::new(p, Irqs, vbus_detect::HardwareVbusDetect::new(Irqs))
