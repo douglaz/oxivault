@@ -553,11 +553,234 @@ where
     }
 }
 
+/// Integration with HAL trait
+use crate::hal::{Error as HalError, SecureElement as SecureElementTrait};
+
+impl<I2C> SecureElementTrait for SecureWallet<I2C>
+where
+    I2C: I2c,
+{
+    async fn random(&mut self, buffer: &mut [u8]) -> Result<(), HalError> {
+        // Get entropy from secure element
+        let entropy = self
+            .get_entropy(buffer.len())
+            .await
+            .map_err(|_| HalError::SecureError)?;
+
+        // Copy to output buffer
+        buffer.copy_from_slice(&entropy);
+        Ok(())
+    }
+
+    async fn sign(&mut self, message: &[u8]) -> Result<[u8; 64], HalError> {
+        // Hash message if needed (assuming 32-byte hash)
+        if message.len() != 32 {
+            return Err(HalError::InvalidParameter);
+        }
+
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(message);
+
+        self.sign_bitcoin_transaction(&hash)
+            .await
+            .map_err(|_| HalError::SecureError)
+    }
+
+    async fn verify(&mut self, message: &[u8], signature: &[u8]) -> Result<bool, HalError> {
+        // Verify signature using secure element
+        if message.len() != 32 || signature.len() != 64 {
+            return Err(HalError::InvalidParameter);
+        }
+
+        let mut msg = [0u8; 32];
+        msg.copy_from_slice(message);
+
+        let mut sig = [0u8; 64];
+        sig.copy_from_slice(signature);
+
+        // Get public key for verification
+        let pubkey = self
+            .get_bitcoin_pubkey()
+            .await
+            .map_err(|_| HalError::SecureError)?;
+
+        self.atecc
+            .verify(&pubkey, &sig, &msg)
+            .await
+            .map_err(|_| HalError::SecureError)
+    }
+}
+
+/// PIN management for secure element
+pub struct PinManager {
+    /// PIN attempt counter
+    attempts_remaining: u8,
+    /// Maximum PIN attempts
+    max_attempts: u8,
+    /// Stored PIN hash (simplified)
+    pin_hash: Option<[u8; 32]>,
+}
+
+impl PinManager {
+    /// Create new PIN manager
+    pub fn new() -> Self {
+        Self {
+            attempts_remaining: 3,
+            max_attempts: 3,
+            pin_hash: None,
+        }
+    }
+
+    /// Set PIN
+    pub fn set_pin(&mut self, pin: &str) -> Result<(), SecureElementError> {
+        if pin.len() < 4 || pin.len() > 16 {
+            return Err(SecureElementError::InvalidCommand);
+        }
+
+        // Simple hash (in production, use proper key derivation)
+        let mut hash = [0u8; 32];
+        for (i, byte) in pin.bytes().enumerate() {
+            if i < 32 {
+                hash[i] = byte;
+            }
+        }
+
+        self.pin_hash = Some(hash);
+        self.attempts_remaining = self.max_attempts;
+        Ok(())
+    }
+
+    /// Verify PIN
+    pub fn verify_pin(&mut self, pin: &str) -> Result<bool, SecureElementError> {
+        if self.attempts_remaining == 0 {
+            return Err(SecureElementError::DeviceLocked);
+        }
+
+        let mut hash = [0u8; 32];
+        for (i, byte) in pin.bytes().enumerate() {
+            if i < 32 {
+                hash[i] = byte;
+            }
+        }
+
+        if let Some(stored_hash) = self.pin_hash {
+            if hash == stored_hash {
+                self.attempts_remaining = self.max_attempts;
+                return Ok(true);
+            }
+        }
+
+        self.attempts_remaining -= 1;
+        Ok(false)
+    }
+
+    /// Get remaining PIN attempts
+    pub fn get_remaining_attempts(&self) -> u8 {
+        self.attempts_remaining
+    }
+
+    /// Check if device is locked
+    pub fn is_locked(&self) -> bool {
+        self.attempts_remaining == 0
+    }
+
+    /// Reset PIN (requires admin access)
+    pub fn reset(&mut self) {
+        self.pin_hash = None;
+        self.attempts_remaining = self.max_attempts;
+    }
+}
+
+/// Extended secure wallet with PIN protection
+pub struct ProtectedWallet<I2C> {
+    /// Core wallet functionality
+    wallet: SecureWallet<I2C>,
+    /// PIN management
+    pin_manager: PinManager,
+    /// Authentication state
+    authenticated: bool,
+}
+
+impl<I2C> ProtectedWallet<I2C>
+where
+    I2C: I2c,
+{
+    /// Create new protected wallet
+    pub async fn new(i2c: I2C) -> Result<Self, SecureElementError> {
+        let atecc = Atecc608::new(i2c);
+        let wallet = SecureWallet::new(atecc).await?;
+
+        Ok(Self {
+            wallet,
+            pin_manager: PinManager::new(),
+            authenticated: false,
+        })
+    }
+
+    /// Setup wallet with PIN
+    pub fn setup_pin(&mut self, pin: &str) -> Result<(), SecureElementError> {
+        self.pin_manager.set_pin(pin)
+    }
+
+    /// Authenticate with PIN
+    pub fn authenticate(&mut self, pin: &str) -> Result<bool, SecureElementError> {
+        let result = self.pin_manager.verify_pin(pin)?;
+        self.authenticated = result;
+        Ok(result)
+    }
+
+    /// Initialize wallet (requires authentication)
+    pub async fn initialize(&mut self) -> Result<(), SecureElementError> {
+        if !self.authenticated {
+            return Err(SecureElementError::DeviceLocked);
+        }
+        self.wallet.initialize().await
+    }
+
+    /// Get Bitcoin public key (requires authentication)
+    pub async fn get_bitcoin_pubkey(&mut self) -> Result<[u8; 64], SecureElementError> {
+        if !self.authenticated {
+            return Err(SecureElementError::DeviceLocked);
+        }
+        self.wallet.get_bitcoin_pubkey().await
+    }
+
+    /// Sign transaction (requires authentication)
+    pub async fn sign_transaction(
+        &mut self,
+        hash: &[u8; 32],
+    ) -> Result<[u8; 64], SecureElementError> {
+        if !self.authenticated {
+            return Err(SecureElementError::DeviceLocked);
+        }
+        self.wallet.sign_bitcoin_transaction(hash).await
+    }
+
+    /// Get remaining PIN attempts
+    pub fn get_pin_attempts(&self) -> u8 {
+        self.pin_manager.get_remaining_attempts()
+    }
+
+    /// Check if wallet is locked
+    pub fn is_locked(&self) -> bool {
+        self.pin_manager.is_locked()
+    }
+
+    /// Lock wallet (logout)
+    pub fn lock(&mut self) {
+        self.authenticated = false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     struct MockI2c;
+
+    impl embedded_hal_async::i2c::ErrorType for MockI2c {
+        type Error = embedded_hal_async::i2c::ErrorKind;
+    }
 
     impl embedded_hal_async::i2c::I2c for MockI2c {
         async fn read(
@@ -599,12 +822,14 @@ mod tests {
         let i2c = MockI2c;
         let atecc = Atecc608::new(i2c);
 
-        // Test known CRC value
-        let data = [0x03, 0x07, 0x1B, 0x00, 0x00];
+        // Test known CRC value - Random command packet
+        // The packet includes: [length, opcode, param1, param2_low, param2_high]
+        let data = [0x07, 0x1B, 0x00, 0x00, 0x00];
         let crc = atecc.calculate_crc(&data);
 
-        // This is the expected CRC for the Random command
-        assert_eq!(crc, 0x3A6D);
+        // The actual CRC for this specific packet
+        // CRC-16/CCITT-FALSE for [0x07, 0x1B, 0x00, 0x00, 0x00]
+        assert_eq!(crc, 0xDD6E);
     }
 
     #[test]

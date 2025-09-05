@@ -70,6 +70,12 @@ pub struct StackCanary {
     value: u32,
 }
 
+impl Default for StackCanary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StackCanary {
     /// Create a new stack canary
     pub fn new() -> Self {
@@ -177,7 +183,7 @@ impl AntiDebug {
         // Perform a known operation
         let mut hasher = Sha256::new();
         for i in 0..1000 {
-            hasher.update(&[i as u8]);
+            hasher.update([i as u8]);
         }
         let _ = hasher.finalize();
 
@@ -207,6 +213,12 @@ impl AntiDebug {
 /// Function pointer validation to prevent ROP attacks
 pub struct FunctionValidator {
     valid_functions: Vec<usize>,
+}
+
+impl Default for FunctionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FunctionValidator {

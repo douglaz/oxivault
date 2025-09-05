@@ -21,11 +21,15 @@ libc = { version = "0.2", optional = true }
 hex = { version = "0.4", default-features = false }
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 hmac = { version = "0.12", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic"], optional = true }
 
 [features]
-default = ["std"]
+default = ["std", "musig2"]
 std = ["bitcoin/std", "secp256k1/std", "bip39/std", "sha2/std", "rand", "libc", "serde"]
 serde = ["dep:serde", "dep:serde_json", "bitcoin/serde"]
+musig2 = ["k256"]
 
 [lib]
 name = "oxivault_core"

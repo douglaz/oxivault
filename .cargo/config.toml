@@ -1,0 +1,49 @@
+# Cargo configuration for cross-compilation
+
+[build]
+# Default target for embedded builds (can be overridden with --target)
+# target = "thumbv7em-none-eabihf"
+
+# Target-specific settings for ARM Cortex-M4 (nRF52840, STM32L4)
+[target.thumbv7em-none-eabihf]
+# Use arm-none-eabi-gcc as linker (set by Nix environment)
+# linker = "arm-none-eabi-gcc"
+runner = "probe-rs run --chip nRF52840_xxAA"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-nostartfiles",
+]
+
+# Target-specific settings for ARM Cortex-M0+ (RP2040)
+[target.thumbv6m-none-eabi]
+# Use arm-none-eabi-gcc as linker (set by Nix environment)
+# linker = "arm-none-eabi-gcc"
+runner = "probe-rs run --chip RP2040"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-nostartfiles",
+]
+
+# Target-specific settings for RISC-V (ESP32-C3)
+[target.riscv32imc-unknown-none-elf]
+runner = "espflash flash --monitor"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+]
+
+# Alias for convenience
+[alias]
+b-embedded = "build --target thumbv7em-none-eabihf"
+b-nrf = "build --target thumbv7em-none-eabihf --features nrf52840"
+b-rp = "build --target thumbv6m-none-eabi --features rp2040"
+b-esp = "build --target riscv32imc-unknown-none-elf --features esp32c3"
+
+# Profile for embedded builds (optimized for size)
+[profile.embedded]
+inherits = "release"
+codegen-units = 1
+debug = false
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

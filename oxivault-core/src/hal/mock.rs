@@ -183,6 +183,12 @@ pub struct MockInput {
     pressed: Vec<Button>,
 }
 
+impl Default for MockInput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockInput {
     pub fn new() -> Self {
         Self {
@@ -307,6 +313,12 @@ pub struct MockCamera {
     flash_enabled: bool,
 }
 
+impl Default for MockCamera {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockCamera {
     pub fn new() -> Self {
         Self {
@@ -411,6 +423,12 @@ pub struct MockPower {
     sleeping: bool,
 }
 
+impl Default for MockPower {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockPower {
     pub fn new() -> Self {
         Self {
@@ -456,6 +474,12 @@ pub struct MockComm {
     connected: bool,
     rx_buffer: Vec<u8>,
     tx_buffer: Vec<u8>,
+}
+
+impl Default for MockComm {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockComm {
@@ -528,6 +552,12 @@ pub struct MockHAL {
     pub power: MockPower,
     pub comm: MockComm,
     uptime_start: u64,
+}
+
+impl Default for MockHAL {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockHAL {

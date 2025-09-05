@@ -109,7 +109,7 @@ impl MnemonicManager {
     /// Generate entropy using double SHA256 (similar to Krux/Tapsigner)
     pub fn generate_entropy_from_bytes(input: &[u8]) -> [u8; 32] {
         let hash1 = Sha256::digest(input);
-        let hash2 = Sha256::digest(&hash1);
+        let hash2 = Sha256::digest(hash1);
         let mut entropy = [0u8; 32];
         entropy.copy_from_slice(&hash2);
         entropy

@@ -184,9 +184,16 @@ impl MultisigConfig {
         }
 
         desc.push(')');
-        if matches!(self.script_type, MultisigScriptType::P2shP2wsh) {
+
+        // Close wsh() wrapper if present
+        if matches!(
+            self.script_type,
+            MultisigScriptType::P2wsh | MultisigScriptType::P2shP2wsh
+        ) {
             desc.push(')');
         }
+
+        // Close sh() wrapper if present
         if matches!(
             self.script_type,
             MultisigScriptType::P2sh | MultisigScriptType::P2shP2wsh
@@ -214,6 +221,7 @@ pub struct PsbtCoordinator {
 #[derive(Debug, Clone)]
 pub struct InputSignatureStatus {
     /// Required signatures
+    #[allow(dead_code)]
     required: usize,
     /// Signatures collected from each cosigner
     signatures: BTreeMap<Fingerprint, Vec<u8>>,
@@ -305,9 +313,9 @@ impl PsbtCoordinator {
             }
 
             // Add all collected signatures
-            for (fingerprint, sig) in &status.signatures {
+            for (fingerprint, _sig) in &status.signatures {
                 // Find the public key for this fingerprint
-                if let Some(cosigner) = self
+                if let Some(_cosigner) = self
                     .config
                     .cosigners
                     .iter()
@@ -323,7 +331,7 @@ impl PsbtCoordinator {
     }
 
     /// Find cosigner by public key
-    fn find_cosigner_by_pubkey(&self, pubkey: &bitcoin::PublicKey) -> Option<&CosignerInfo> {
+    fn find_cosigner_by_pubkey(&self, _pubkey: &bitcoin::PublicKey) -> Option<&CosignerInfo> {
         // Simplified - real implementation needs to derive and check keys
         self.config.cosigners.first()
     }
@@ -412,11 +420,11 @@ impl Default for MultisigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::bip32::ExtendedPrivKey;
+    use bitcoin::bip32::Xpriv;
 
     #[test]
     fn test_multisig_config() -> Result<()> {
-        let xprv = ExtendedPrivKey::from_str(
+        let xprv = Xpriv::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
         ).map_err(|e| Error::BitcoinError(format!("Invalid xprv: {e:?}")))?;
 
@@ -457,7 +465,7 @@ mod tests {
 
     #[test]
     fn test_multisig_builder() -> Result<()> {
-        let xprv = ExtendedPrivKey::from_str(
+        let xprv = Xpriv::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
         ).map_err(|e| Error::BitcoinError(format!("Invalid xprv: {e:?}")))?;
 
@@ -498,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_descriptor_generation() -> Result<()> {
-        let xprv = ExtendedPrivKey::from_str(
+        let xprv = Xpriv::from_str(
             "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
         ).map_err(|e| Error::BitcoinError(format!("Invalid xprv: {e:?}")))?;
 

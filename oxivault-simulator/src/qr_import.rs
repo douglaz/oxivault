@@ -229,7 +229,7 @@ impl QrImporter {
         if data.len() > 10 && !data.contains(' ') {
             if let Ok(decoded) = base64_decode(data) {
                 // PSBT magic bytes: 0x70, 0x73, 0x62, 0x74, 0xff
-                if decoded.len() > 5 && &decoded[0..5] == &[0x70, 0x73, 0x62, 0x74, 0xff] {
+                if decoded.len() > 5 && decoded[0..5] == [0x70, 0x73, 0x62, 0x74, 0xff] {
                     return DataType::Psbt;
                 }
             }

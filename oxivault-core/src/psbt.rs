@@ -172,9 +172,7 @@ impl PsbtManager {
         // Now apply signatures
         for (index, signature) in signatures.into_iter().enumerate() {
             if let Some(sig) = signature {
-                self.psbt.inputs[index]
-                    .partial_sigs
-                    .insert(pubkey.clone(), sig);
+                self.psbt.inputs[index].partial_sigs.insert(pubkey, sig);
             }
         }
 

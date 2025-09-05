@@ -5,10 +5,14 @@
 
 use crate::{Error, Result};
 use bitcoin::{
-    bip32::{DerivationPath, Fingerprint},
+    bip32::{DerivationPath, Fingerprint, Xpriv, Xpub},
+    key::CompressedPublicKey,
     psbt::Psbt,
-    Network,
+    secp256k1::{Message, Secp256k1},
+    sighash::SighashCache,
+    Address, Network, PublicKey,
 };
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
@@ -21,6 +25,7 @@ use alloc::{
 use std::{format, string::ToString};
 
 /// HWI protocol version
+#[allow(dead_code)]
 const HWI_VERSION: &str = "2.0.0";
 
 /// HWI command types
@@ -100,6 +105,8 @@ pub enum HwiData {
     SignedMessage { signature: String },
     /// Device information
     DeviceInfo(DeviceInfo),
+    /// Backup data
+    BackupData { backup: String },
     /// Simple success
     Ok,
 }
@@ -137,6 +144,18 @@ pub struct HwiProtocol {
     model: String,
     /// Device locked
     locked: bool,
+    /// Master private key (in a real implementation, this would be stored securely)
+    master_key: Option<Xpriv>,
+    /// Secp256k1 context
+    secp: Secp256k1<bitcoin::secp256k1::All>,
+    /// PIN attempts remaining
+    pin_attempts: u8,
+    /// Passphrase enabled
+    passphrase_enabled: bool,
+    /// Device initialized
+    initialized: bool,
+    /// Stored PIN (for demo purposes - would be hashed in production)
+    stored_pin: Option<String>,
 }
 
 impl HwiProtocol {
@@ -147,7 +166,18 @@ impl HwiProtocol {
             network,
             model: "OxiVault".to_string(),
             locked: false,
+            master_key: None,
+            secp: Secp256k1::new(),
+            pin_attempts: 3,
+            passphrase_enabled: false,
+            initialized: false,
+            stored_pin: None,
         }
+    }
+
+    /// Set master key for key derivation (for testing purposes)
+    pub fn set_master_key(&mut self, master_key: Xpriv) {
+        self.master_key = Some(master_key);
     }
 
     /// Process HWI command
@@ -222,12 +252,43 @@ impl HwiProtocol {
             }
         };
 
-        // In real implementation, derive actual xpub
-        // For now, return placeholder
+        // Get or create master key
+        let master_key = if let Some(key) = &self.master_key {
+            *key
+        } else {
+            // Create a deterministic test key
+            let seed = [0x01; 32];
+            match Xpriv::new_master(self.network, &seed) {
+                Ok(key) => key,
+                Err(_) => {
+                    return HwiResponse::Error {
+                        success: false,
+                        error: "Failed to generate master key".to_string(),
+                        code: -2,
+                    };
+                }
+            }
+        };
+
+        // Derive xpub at the given path
+        let derived_xpriv = match master_key.derive_priv(&self.secp, &derivation) {
+            Ok(key) => key,
+            Err(_) => {
+                return HwiResponse::Error {
+                    success: false,
+                    error: format!("Failed to derive key at path: {}", path),
+                    code: -3,
+                };
+            }
+        };
+
+        // Convert to xpub
+        let xpub = Xpub::from_priv(&self.secp, &derived_xpriv);
+
         HwiResponse::Success {
             success: true,
             data: HwiData::Xpub {
-                xpub: "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKpXqjJ5D8sJdCgxUMFQgmVrYTTRpopTJzSFTpKhEqtpFRkDvhMJPqPvi2gLfFS5URLpHvHSqRRmnR".to_string(),
+                xpub: xpub.to_string(),
             },
         }
     }
@@ -247,7 +308,7 @@ impl HwiProtocol {
         };
 
         // Parse PSBT
-        let psbt = match Psbt::deserialize(&psbt_bytes) {
+        let mut psbt = match Psbt::deserialize(&psbt_bytes) {
             Ok(p) => p,
             Err(_) => {
                 return HwiResponse::Error {
@@ -258,18 +319,111 @@ impl HwiProtocol {
             }
         };
 
-        // In real implementation, sign the PSBT
-        // For now, return the same PSBT
+        // Get or create master key
+        let master_key = if let Some(key) = &self.master_key {
+            *key
+        } else {
+            // Create a deterministic test key
+            let seed = [0x01; 32];
+            match Xpriv::new_master(self.network, &seed) {
+                Ok(key) => key,
+                Err(_) => {
+                    return HwiResponse::Error {
+                        success: false,
+                        error: "Failed to generate master key".to_string(),
+                        code: -4,
+                    };
+                }
+            }
+        };
+
+        // Sign each input
+        let tx = psbt.unsigned_tx.clone();
+        for (input_idx, input) in psbt.inputs.iter_mut().enumerate() {
+            // Get the derivation path for this input
+            let (secp_pubkey, derivation_path) =
+                if let Some(bip32) = input.bip32_derivation.iter().next() {
+                    // Regular input - bip32_derivation uses secp256k1::PublicKey
+                    let secp_pubkey = *bip32.0;
+                    let (_fingerprint, path) = bip32.1;
+                    (secp_pubkey, path.clone())
+                } else if let Some(tap_bip32) = input.tap_key_origins.iter().next() {
+                    // Taproot input - for now, use a default path and derive the pubkey
+                    let _xonly_key = tap_bip32.0;
+                    let (_fingerprint, _path) = tap_bip32.1;
+                    // Derive a default pubkey for taproot
+                    let default_path = DerivationPath::from_str("m/86'/0'/0'/0/0").unwrap();
+                    let derived_key = master_key.derive_priv(&self.secp, &default_path).unwrap();
+                    let bitcoin_pubkey =
+                        PublicKey::from_private_key(&self.secp, &derived_key.to_priv());
+                    let secp_pubkey = bitcoin_pubkey.inner;
+                    (secp_pubkey, default_path)
+                } else {
+                    // No derivation info, skip
+                    continue;
+                };
+
+            // Convert to bitcoin::PublicKey for use with partial_sigs
+            let pubkey = PublicKey {
+                inner: secp_pubkey,
+                compressed: true,
+            };
+
+            // Derive the private key
+            let derived_key = match master_key.derive_priv(&self.secp, &derivation_path) {
+                Ok(key) => key,
+                Err(_) => continue,
+            };
+
+            // Determine script and sighash type
+            if input.witness_utxo.is_some() {
+                // Witness input (SegWit)
+                let utxo = input.witness_utxo.as_ref().unwrap();
+
+                // Use default sighash type if not specified
+                let sighash_type = bitcoin::sighash::EcdsaSighashType::All;
+
+                // Create sighash
+                let mut cache = SighashCache::new(&tx);
+                let sighash = match cache.p2wpkh_signature_hash(
+                    input_idx,
+                    &utxo.script_pubkey,
+                    utxo.value,
+                    sighash_type,
+                ) {
+                    Ok(hash) => hash,
+                    Err(_) => continue,
+                };
+
+                // Sign
+                let msg = Message::from_digest_slice(&sighash[..]).unwrap();
+                let sig = self.secp.sign_ecdsa(&msg, &derived_key.to_priv().inner);
+
+                // Add signature to partial_sigs (uses bitcoin::PublicKey as key)
+                let mut final_sig = sig.serialize_der().to_vec();
+                final_sig.push(sighash_type.to_u32() as u8);
+                input.partial_sigs.insert(
+                    pubkey,
+                    bitcoin::ecdsa::Signature::from_slice(&final_sig).unwrap(),
+                );
+            }
+            // Add other input types (legacy, taproot) as needed
+        }
+
+        // Serialize signed PSBT
+        let signed_bytes = psbt.serialize();
+        let signed_base64 = base64::encode(&signed_bytes);
+
         HwiResponse::Success {
             success: true,
             data: HwiData::SignedPsbt {
-                psbt: psbt_str.to_string(),
+                psbt: signed_base64,
             },
         }
     }
 
     /// Display address on device
-    async fn display_address(&self, path: &str, descriptor: Option<&str>) -> HwiResponse {
+    async fn display_address(&self, path: &str, _descriptor: Option<&str>) -> HwiResponse {
         // Parse derivation path
         let derivation = match DerivationPath::from_str(path) {
             Ok(d) => d,
@@ -282,12 +436,65 @@ impl HwiProtocol {
             }
         };
 
-        // In real implementation, derive and display address
-        // For now, return placeholder
-        let address = match self.network {
-            Network::Bitcoin => "bc1q7s49n5axjyqnkmlr5wqnqvvs5j8qu0d8jyf5kz",
-            Network::Testnet => "tb1q7s49n5axjyqnkmlr5wqnqvvs5j8qu0dk5zslhm",
-            _ => "bc1q7s49n5axjyqnkmlr5wqnqvvs5j8qu0d8jyf5kz",
+        // Get or create master key
+        let master_key = if let Some(key) = &self.master_key {
+            *key
+        } else {
+            // Create a deterministic test key
+            let seed = [0x01; 32];
+            match Xpriv::new_master(self.network, &seed) {
+                Ok(key) => key,
+                Err(_) => {
+                    return HwiResponse::Error {
+                        success: false,
+                        error: "Failed to generate master key".to_string(),
+                        code: -2,
+                    };
+                }
+            }
+        };
+
+        // Derive key at the given path
+        let derived_xpriv = match master_key.derive_priv(&self.secp, &derivation) {
+            Ok(key) => key,
+            Err(_) => {
+                return HwiResponse::Error {
+                    success: false,
+                    error: format!("Failed to derive key at path: {}", path),
+                    code: -3,
+                };
+            }
+        };
+
+        // Get public key
+        let pubkey = PublicKey::from_private_key(&self.secp, &derived_xpriv.to_priv());
+
+        // Convert to CompressedPublicKey for address generation
+        let compressed_pubkey = CompressedPublicKey(pubkey.inner);
+
+        // Determine address type based on derivation path
+        // m/84'/... = Native Segwit (P2WPKH)
+        // m/49'/... = Nested Segwit (P2SH-P2WPKH)
+        // m/44'/... = Legacy (P2PKH)
+        let address = if path.contains("84'") {
+            // Native Segwit
+            Address::p2wpkh(&compressed_pubkey, self.network)
+        } else if path.contains("49'") {
+            // Nested Segwit
+            let witness_script = Address::p2wpkh(&compressed_pubkey, self.network);
+            match Address::p2sh(&witness_script.script_pubkey(), self.network) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    return HwiResponse::Error {
+                        success: false,
+                        error: "Failed to create nested segwit address".to_string(),
+                        code: -4,
+                    };
+                }
+            }
+        } else {
+            // Default to Native Segwit for BIP84 and others
+            Address::p2wpkh(&compressed_pubkey, self.network)
         };
 
         HwiResponse::Success {
@@ -299,7 +506,7 @@ impl HwiProtocol {
     }
 
     /// Sign message
-    async fn sign_message(&self, message: &str, path: &str) -> HwiResponse {
+    async fn sign_message(&self, _message: &str, _path: &str) -> HwiResponse {
         // In real implementation, sign the message
         // For now, return placeholder signature
         HwiResponse::Success {
@@ -332,8 +539,25 @@ impl HwiProtocol {
 
     /// Prompt for PIN
     async fn prompt_pin(&mut self) -> HwiResponse {
-        // In real implementation, show PIN prompt on device
-        self.locked = true;
+        // Check if device is initialized
+        if !self.initialized {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device not initialized".to_string(),
+                code: -20,
+            };
+        }
+
+        // Check if already unlocked
+        if !self.locked {
+            return HwiResponse::Success {
+                success: true,
+                data: HwiData::Ok,
+            };
+        }
+
+        // In real implementation, show PIN prompt on device screen
+        // Here we just return success to indicate PIN is needed
         HwiResponse::Success {
             success: true,
             data: HwiData::Ok,
@@ -342,25 +566,74 @@ impl HwiProtocol {
 
     /// Send PIN
     async fn send_pin(&mut self, pin: &str) -> HwiResponse {
-        // In real implementation, verify PIN
-        if pin.len() >= 4 && pin.len() <= 8 {
+        // Check if device is initialized
+        if !self.initialized {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device not initialized".to_string(),
+                code: -20,
+            };
+        }
+
+        // Check PIN attempts
+        if self.pin_attempts == 0 {
+            return HwiResponse::Error {
+                success: false,
+                error: "No PIN attempts remaining. Device locked.".to_string(),
+                code: -12,
+            };
+        }
+
+        // Validate PIN format
+        if pin.len() < 4 || pin.len() > 8 || !pin.chars().all(|c| c.is_ascii_digit()) {
+            return HwiResponse::Error {
+                success: false,
+                error: "PIN must be 4-8 digits".to_string(),
+                code: -10,
+            };
+        }
+
+        // Verify PIN (in production, this would be hashed)
+        if let Some(stored) = &self.stored_pin {
+            if pin == stored {
+                self.locked = false;
+                self.pin_attempts = 3; // Reset attempts
+                HwiResponse::Success {
+                    success: true,
+                    data: HwiData::Ok,
+                }
+            } else {
+                self.pin_attempts -= 1;
+                HwiResponse::Error {
+                    success: false,
+                    error: format!("Wrong PIN. {} attempts remaining", self.pin_attempts),
+                    code: -11,
+                }
+            }
+        } else {
+            // No PIN set, accept any valid PIN
             self.locked = false;
             HwiResponse::Success {
                 success: true,
                 data: HwiData::Ok,
-            }
-        } else {
-            HwiResponse::Error {
-                success: false,
-                error: "Invalid PIN".to_string(),
-                code: -10,
             }
         }
     }
 
     /// Toggle passphrase mode
     fn toggle_passphrase(&mut self) -> HwiResponse {
-        // In real implementation, toggle passphrase mode
+        // Check if device is initialized
+        if !self.initialized {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device not initialized".to_string(),
+                code: -20,
+            };
+        }
+
+        // Toggle passphrase setting
+        self.passphrase_enabled = !self.passphrase_enabled;
+
         HwiResponse::Success {
             success: true,
             data: HwiData::Ok,
@@ -369,17 +642,57 @@ impl HwiProtocol {
 
     /// Setup device
     async fn setup(&mut self) -> HwiResponse {
-        // In real implementation, initialize device
-        HwiResponse::Success {
-            success: true,
-            data: HwiData::Ok,
+        // Check if already initialized
+        if self.initialized {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device already initialized".to_string(),
+                code: -21,
+            };
+        }
+
+        // Generate new seed (in production, use proper entropy)
+        let seed = [0x42; 32]; // Placeholder seed
+        match Xpriv::new_master(self.network, &seed) {
+            Ok(key) => {
+                self.master_key = Some(key);
+                self.fingerprint = key.fingerprint(&self.secp);
+                self.initialized = true;
+                self.locked = false;
+                self.stored_pin = Some("1234".to_string()); // Default PIN
+
+                HwiResponse::Success {
+                    success: true,
+                    data: HwiData::Ok,
+                }
+            }
+            Err(_) => HwiResponse::Error {
+                success: false,
+                error: "Failed to generate master key".to_string(),
+                code: -22,
+            },
         }
     }
 
     /// Wipe device
     async fn wipe(&mut self) -> HwiResponse {
-        // In real implementation, wipe device
+        // Check PIN is unlocked before wiping
+        if self.locked && self.initialized {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device is locked. Unlock with PIN first".to_string(),
+                code: -23,
+            };
+        }
+
+        // Wipe all data
+        self.master_key = None;
         self.locked = true;
+        self.initialized = false;
+        self.passphrase_enabled = false;
+        self.pin_attempts = 3;
+        self.stored_pin = None;
+
         HwiResponse::Success {
             success: true,
             data: HwiData::Ok,
@@ -388,31 +701,98 @@ impl HwiProtocol {
 
     /// Restore from backup
     async fn restore(&mut self, mnemonic: Option<&str>, passphrase: Option<&str>) -> HwiResponse {
-        // In real implementation, restore from mnemonic
-        if mnemonic.is_some() {
-            self.locked = false;
-            HwiResponse::Success {
-                success: true,
-                data: HwiData::Ok,
-            }
-        } else {
-            HwiResponse::Error {
+        // Check if already initialized
+        if self.initialized {
+            return HwiResponse::Error {
                 success: false,
-                error: "Mnemonic required".to_string(),
-                code: -11,
+                error: "Device already initialized. Wipe first.".to_string(),
+                code: -24,
+            };
+        }
+
+        // Validate mnemonic
+        let mnemonic_str = match mnemonic {
+            Some(m) => m,
+            None => {
+                return HwiResponse::Error {
+                    success: false,
+                    error: "Mnemonic required".to_string(),
+                    code: -11,
+                }
             }
+        };
+
+        // Validate mnemonic format (simplified - just check word count)
+        let word_count = mnemonic_str.split_whitespace().count();
+        if word_count != 12 && word_count != 18 && word_count != 24 {
+            return HwiResponse::Error {
+                success: false,
+                error: "Invalid mnemonic: must be 12, 18, or 24 words".to_string(),
+                code: -25,
+            };
+        }
+
+        // In production, would derive seed from mnemonic + passphrase
+        // For now, use placeholder
+        let seed = [0x43; 32];
+        match Xpriv::new_master(self.network, &seed) {
+            Ok(key) => {
+                self.master_key = Some(key);
+                self.fingerprint = key.fingerprint(&self.secp);
+                self.initialized = true;
+                self.locked = false;
+                self.stored_pin = Some("1234".to_string()); // Default PIN
+                self.passphrase_enabled = passphrase.is_some();
+
+                HwiResponse::Success {
+                    success: true,
+                    data: HwiData::Ok,
+                }
+            }
+            Err(_) => HwiResponse::Error {
+                success: false,
+                error: "Failed to restore from mnemonic".to_string(),
+                code: -26,
+            },
         }
     }
 
     /// Backup device
     async fn backup(&self) -> HwiResponse {
-        // In real implementation, create backup
+        // Check if device is initialized
+        if !self.initialized {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device not initialized".to_string(),
+                code: -20,
+            };
+        }
+
+        // Check if device is unlocked
+        if self.locked {
+            return HwiResponse::Error {
+                success: false,
+                error: "Device is locked. Unlock with PIN first".to_string(),
+                code: -27,
+            };
+        }
+
+        // In production, would return encrypted backup data
+        // For now, return success with placeholder data
         HwiResponse::Success {
             success: true,
-            data: HwiData::Ok,
+            data: HwiData::BackupData {
+                backup: base64::encode(b"encrypted_backup_data_placeholder"),
+            },
         }
     }
 }
+
+/// USB HID Report ID for HWI
+const HID_REPORT_ID: u8 = 0x3F;
+
+/// USB packet size
+const USB_PACKET_SIZE: usize = 64;
 
 /// USB transport for HWI communication
 pub struct UsbTransport {
@@ -420,6 +800,23 @@ pub struct UsbTransport {
     input_buffer: Vec<u8>,
     /// Output buffer
     output_buffer: Vec<u8>,
+    /// Device connected
+    connected: bool,
+    /// Vendor ID
+    #[allow(dead_code)]
+    vendor_id: u16,
+    /// Product ID
+    #[allow(dead_code)]
+    product_id: u16,
+    /// Serial number
+    #[allow(dead_code)]
+    serial: String,
+}
+
+impl Default for UsbTransport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UsbTransport {
@@ -428,29 +825,143 @@ impl UsbTransport {
         Self {
             input_buffer: Vec::with_capacity(4096),
             output_buffer: Vec::with_capacity(4096),
+            connected: false,
+            vendor_id: 0x1209,  // pid.codes test VID
+            product_id: 0x0001, // Test PID
+            serial: "OXIVAULT001".to_string(),
         }
+    }
+
+    /// Enumerate USB devices
+    pub fn enumerate_devices() -> Result<Vec<DeviceInfo>> {
+        // In production, use rusb or similar to enumerate actual devices
+        // For now, return mock device
+        let device = DeviceInfo {
+            r#type: "oxivault".to_string(),
+            path: "usb:1209:0001:OXIVAULT001".to_string(),
+            label: Some("OxiVault Hardware Wallet".to_string()),
+            model: "OxiVault".to_string(),
+            needs_pin_sent: false,
+            needs_passphrase_sent: false,
+            fingerprint: None,
+            error: None,
+            code: None,
+        };
+
+        Ok(vec![device])
+    }
+
+    /// Connect to device
+    pub async fn connect(&mut self, path: &str) -> Result<()> {
+        // Parse USB path: usb:VID:PID:SERIAL
+        let parts: Vec<&str> = path.split(':').collect();
+        if parts.len() != 4 || parts[0] != "usb" {
+            return Err(Error::InvalidParameter("Invalid USB path".to_string()));
+        }
+
+        // In production, actually connect to the USB device
+        self.connected = true;
+        Ok(())
+    }
+
+    /// Disconnect from device
+    pub async fn disconnect(&mut self) {
+        self.connected = false;
+        self.input_buffer.clear();
+        self.output_buffer.clear();
     }
 
     /// Read command from USB
     pub async fn read_command(&mut self) -> Result<HwiCommand> {
-        // In real implementation, read from USB endpoint
-        // For now, return error
-        Err(Error::InvalidParameter(
-            "USB read not implemented".to_string(),
-        ))
+        if !self.connected {
+            return Err(Error::InvalidParameter("Device not connected".to_string()));
+        }
+
+        // In production: Read HID packets from USB endpoint
+        // Packet format: [REPORT_ID][LENGTH_HIGH][LENGTH_LOW][DATA...]
+
+        // For demonstration, simulate reading a command
+        // This would actually read from USB HID interface
+        self.input_buffer.clear();
+
+        // Simulate receiving enumerate command
+        let test_cmd = r#"{"command":"enumerate"}"#;
+        self.input_buffer.extend_from_slice(test_cmd.as_bytes());
+
+        // Parse JSON command
+        #[cfg(feature = "serde")]
+        {
+            let cmd: HwiCommand = serde_json::from_slice(&self.input_buffer)
+                .map_err(|e| Error::InvalidParameter(format!("JSON parse error: {}", e)))?;
+            Ok(cmd)
+        }
+
+        #[cfg(not(feature = "serde"))]
+        {
+            // Without serde, return a default command for testing
+            Ok(HwiCommand::Enumerate)
+        }
     }
 
     /// Write response to USB
     pub async fn write_response(&mut self, response: &HwiResponse) -> Result<()> {
-        // Serialize response to JSON
-        let json = serde_json::to_string(response)
-            .map_err(|e| Error::InvalidParameter(format!("JSON error: {}", e)))?;
+        if !self.connected {
+            return Err(Error::InvalidParameter("Device not connected".to_string()));
+        }
 
-        // In real implementation, write to USB endpoint
-        self.output_buffer.clear();
-        self.output_buffer.extend_from_slice(json.as_bytes());
+        // Serialize response to JSON
+        #[cfg(feature = "serde")]
+        {
+            let json = serde_json::to_string(response)
+                .map_err(|e| Error::InvalidParameter(format!("JSON error: {}", e)))?;
+
+            self.output_buffer.clear();
+            self.output_buffer.extend_from_slice(json.as_bytes());
+        }
+
+        #[cfg(not(feature = "serde"))]
+        {
+            // Without serde, just store a success indicator
+            self.output_buffer.clear();
+            self.output_buffer.extend_from_slice(b"{\"success\":true}");
+        }
+
+        // In production: Write HID packets to USB endpoint
+        // Split into 64-byte packets with header
+        let data_len = self.output_buffer.len();
+        let mut offset = 0;
+
+        while offset < data_len {
+            let mut packet = [0u8; USB_PACKET_SIZE];
+            packet[0] = HID_REPORT_ID;
+
+            if offset == 0 {
+                // First packet includes length
+                packet[1] = (data_len >> 8) as u8;
+                packet[2] = (data_len & 0xFF) as u8;
+
+                let copy_len = core::cmp::min(data_len, USB_PACKET_SIZE - 3);
+                packet[3..3 + copy_len].copy_from_slice(&self.output_buffer[..copy_len]);
+                offset += copy_len;
+            } else {
+                // Continuation packets
+                let remaining = data_len - offset;
+                let copy_len = core::cmp::min(remaining, USB_PACKET_SIZE - 1);
+                packet[1..1 + copy_len]
+                    .copy_from_slice(&self.output_buffer[offset..offset + copy_len]);
+                offset += copy_len;
+            }
+
+            // In production: Write packet to USB HID endpoint
+            // usb_device.write(&packet)?;
+        }
 
         Ok(())
+    }
+
+    /// Check if device is connected
+    pub fn is_connected(&self) -> bool {
+        self.connected
     }
 }
 
@@ -492,8 +1003,6 @@ mod base64 {
         super::hex_utils::decode(s).map_err(|_| ())
     }
 }
-
-use core::str::FromStr;
 
 #[cfg(test)]
 mod tests {

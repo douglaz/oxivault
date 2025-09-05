@@ -17,7 +17,7 @@ use std::io;
 
 use oxivault_core::{
     bip39::MnemonicManager,
-    psbt_parser::{PsbtAnalysis as CorePsbtAnalysis, PsbtParser},
+    psbt_parser::PsbtParser,
     wallet::{ScriptType, Wallet},
     Network,
 };
@@ -226,7 +226,7 @@ impl App {
     }
 
     fn draw_main_menu(&self, f: &mut Frame, area: Rect) {
-        let menu_items = vec![
+        let menu_items = [
             "1. Generate New Mnemonic",
             "2. Import Mnemonic",
             "3. Derive Addresses",
@@ -758,7 +758,7 @@ impl App {
 
     fn draw_show_qr(&self, f: &mut Frame, area: Rect) {
         if let Some(ref qr_display) = self.qr_display {
-            let lines: Vec<Line> = qr_display.lines().map(|l| Line::from(l)).collect();
+            let lines: Vec<Line> = qr_display.lines().map(Line::from).collect();
 
             let paragraph = Paragraph::new(lines)
                 .block(
@@ -790,7 +790,7 @@ impl App {
             // Generate QR for current part
             if let Ok(qr) = QrGenerator::generate(part) {
                 let qr_display = AsciiQrRenderer::render_compact(&qr);
-                let lines: Vec<Line> = qr_display.lines().map(|l| Line::from(l)).collect();
+                let lines: Vec<Line> = qr_display.lines().map(Line::from).collect();
 
                 let title = format!(
                     "BBQr Part {}/{}",
@@ -1027,7 +1027,7 @@ impl App {
     }
 
     fn draw_psbt_menu(&self, f: &mut Frame, area: Rect) {
-        let items = vec![
+        let items = [
             if self.selected_index == 0 {
                 "→ Import PSBT"
             } else {
@@ -1048,13 +1048,10 @@ impl App {
         let content: Vec<Line> = vec![Line::from("PSBT Operations"), Line::from("")]
             .into_iter()
             .chain(items.iter().map(|&item| Line::from(item)))
-            .chain(
-                vec![
-                    Line::from(""),
-                    Line::from("Press Enter to select, ESC to go back"),
-                ]
-                .into_iter(),
-            )
+            .chain(vec![
+                Line::from(""),
+                Line::from("Press Enter to select, ESC to go back"),
+            ])
             .collect();
 
         let paragraph = Paragraph::new(content)

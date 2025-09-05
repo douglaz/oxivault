@@ -116,6 +116,7 @@
             # Embedded development tools
             probe-rs-tools
             cargo-binutils
+            gcc-arm-embedded    # ARM cross-compiler toolchain
             
             # Development tools
             cargo-edit
@@ -140,6 +141,16 @@
 
           # Environment variables
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          
+          # Cross-compilation settings for ARM targets
+          CC_thumbv7em_none_eabihf = "${pkgs.gcc-arm-embedded}/bin/arm-none-eabi-gcc";
+          AR_thumbv7em_none_eabihf = "${pkgs.gcc-arm-embedded}/bin/arm-none-eabi-ar";
+          CC_thumbv6m_none_eabi = "${pkgs.gcc-arm-embedded}/bin/arm-none-eabi-gcc";
+          AR_thumbv6m_none_eabi = "${pkgs.gcc-arm-embedded}/bin/arm-none-eabi-ar";
+          
+          # Tell Cargo to use the ARM linker
+          CARGO_TARGET_THUMBV7EM_NONE_EABIHF_LINKER = "${pkgs.gcc-arm-embedded}/bin/arm-none-eabi-gcc";
+          CARGO_TARGET_THUMBV6M_NONE_EABI_LINKER = "${pkgs.gcc-arm-embedded}/bin/arm-none-eabi-gcc";
           
           shellHook = ''
             echo "🦀 OxiVault development environment"

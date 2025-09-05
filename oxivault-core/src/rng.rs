@@ -35,6 +35,13 @@ pub struct SecureRng {
 }
 
 #[cfg(feature = "std")]
+impl Default for SecureRng {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "std")]
 impl SecureRng {
     /// Create a new secure RNG
     pub fn new() -> Self {
@@ -79,6 +86,12 @@ impl RandomSource for HardwareRng {
 pub struct EntropyMixer {
     pool: Vec<u8>,
     pool_pos: usize,
+}
+
+impl Default for EntropyMixer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EntropyMixer {

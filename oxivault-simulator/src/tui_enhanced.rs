@@ -3,14 +3,12 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    text::Line,
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-use oxivault_qr::{
-    AsciiQrRenderer, BBQrAnimator, BBQrQrGenerator, BBQrScanner, FileType, QrGenerator, ScanResult,
-};
+use oxivault_qr::{AsciiQrRenderer, BBQrDecoder, BBQrEncoder, EncodingType, FileType};
 
 use crossterm::event::KeyCode;
 use std::time::{Duration, Instant};
@@ -40,18 +38,29 @@ impl PsbtExportState {
 
     /// Generate BBQr codes for PSBT data
     pub fn generate_for_psbt(&mut self, psbt_bytes: &[u8]) -> Result<(), String> {
-        let generator = BBQrQrGenerator::new();
+        // Use BBQr encoder for PSBT
+        let encoder = BBQrEncoder::new(
+            FileType::Psbt,
+            EncodingType::Base32, // Use Base32 encoding
+            200,                  // Max fragment size
+        );
 
-        // Generate QR codes
-        let qr_codes = generator
-            .generate_psbt_qrs(psbt_bytes)
-            .map_err(|e| format!("Failed to generate QR codes: {}", e))?;
+        // Split data into parts
+        let parts = encoder
+            .split(psbt_bytes)
+            .map_err(|e| format!("Failed to encode: {}", e))?;
 
-        // Convert to ASCII for terminal display
+        // Convert each part to QR code and then to ASCII for terminal display
         self.qr_codes.clear();
-        for qr in qr_codes {
-            let ascii = AsciiQrRenderer::render_compact(&qr);
-            self.qr_codes.push(ascii);
+        for part in parts {
+            // Generate QR code from the BBQr part
+            match qrcode::QrCode::new(&part) {
+                Ok(qr) => {
+                    let ascii = AsciiQrRenderer::render_compact(&qr);
+                    self.qr_codes.push(ascii);
+                }
+                Err(e) => return Err(format!("Failed to generate QR: {:?}", e)),
+            }
         }
 
         self.current_index = 0;
@@ -149,7 +158,7 @@ fn draw_animated_qr(state: &PsbtExportState, f: &mut Frame, area: Rect) {
 
     // QR Code display
     if let Some(qr_ascii) = state.qr_codes.get(state.current_index) {
-        let lines: Vec<Line> = qr_ascii.lines().map(|l| Line::from(l)).collect();
+        let lines: Vec<Line> = qr_ascii.lines().map(Line::from).collect();
         let qr_widget = Paragraph::new(lines)
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
@@ -198,7 +207,7 @@ fn draw_qr_grid(state: &PsbtExportState, f: &mut Frame, area: Rect) {
 
     // Calculate grid layout
     let cols = ((state.qr_codes.len() as f32).sqrt().ceil()) as usize;
-    let rows = (state.qr_codes.len() + cols - 1) / cols;
+    let rows = state.qr_codes.len().div_ceil(cols);
 
     // Create row chunks
     let row_constraints: Vec<Constraint> = (0..rows)
@@ -294,16 +303,22 @@ pub fn handle_psbt_export_input(state: &mut PsbtExportState, key: KeyCode) -> Op
 
 /// QR import state for scanning BBQr sequences
 pub struct QrImportState {
-    scanner: BBQrScanner,
+    decoder: BBQrDecoder,
     scanned_parts: Vec<String>,
     result_data: Option<Vec<u8>>,
     error_message: Option<String>,
 }
 
+impl Default for QrImportState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QrImportState {
     pub fn new() -> Self {
         Self {
-            scanner: BBQrScanner::new(),
+            decoder: BBQrDecoder::new(),
             scanned_parts: Vec::new(),
             result_data: None,
             error_message: None,
@@ -312,35 +327,42 @@ impl QrImportState {
 
     /// Process a scanned QR code string
     pub fn scan_qr(&mut self, qr_data: &str) -> Result<(), String> {
-        match self.scanner.scan(qr_data) {
-            Ok(ScanResult::Complete(data)) => {
-                self.result_data = Some(data);
-                Ok(())
-            }
-            Ok(ScanResult::Progress { received, total }) => {
-                self.scanned_parts
-                    .push(format!("Part {}/{} scanned", received, total));
-                Ok(())
-            }
-            Ok(ScanResult::Duplicate) => {
-                self.error_message = Some("Duplicate QR code scanned".to_string());
-                Ok(())
+        match self.decoder.add_part(qr_data) {
+            Ok(_) => {
+                if self.decoder.is_complete() {
+                    // Combine the complete data
+                    match self.decoder.combine() {
+                        Ok(data) => {
+                            self.result_data = Some(data);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            self.error_message = Some(format!("Decode error: {}", e));
+                            Err(format!("Decode error: {}", e))
+                        }
+                    }
+                } else {
+                    let (received, total) = self.decoder.progress();
+                    self.scanned_parts
+                        .push(format!("Part {}/{} scanned", received, total));
+                    Ok(())
+                }
             }
             Err(e) => {
-                self.error_message = Some(format!("Scan error: {}", e));
-                Err(e.to_string())
+                self.error_message = Some(format!("Scan error: {:?}", e));
+                Err(format!("Scan error: {:?}", e))
             }
         }
     }
 
     /// Get progress
     pub fn progress(&self) -> (usize, usize) {
-        self.scanner.progress()
+        self.decoder.progress()
     }
 
     /// Reset scanner
     pub fn reset(&mut self) {
-        self.scanner = BBQrScanner::new();
+        self.decoder = BBQrDecoder::new();
         self.scanned_parts.clear();
         self.result_data = None;
         self.error_message = None;

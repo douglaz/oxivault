@@ -32,7 +32,8 @@ pub trait Display {
     /// Write text at position
     async fn write_text(&mut self, text: &str, x: u16, y: u16) -> Result<(), Error>;
 
-    /// Display QR code
+    /// Display QR code (only available with "qr" feature)
+    #[cfg(feature = "qr")]
     async fn show_qr(&mut self, data: &[u8]) -> Result<(), Error>;
 
     /// Show menu with selection

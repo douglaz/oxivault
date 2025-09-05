@@ -13,6 +13,8 @@ mod tui;
 mod tui_enhanced;
 mod tui_signing;
 
+use tui_enhanced::PsbtExportState;
+
 #[derive(Parser)]
 #[command(name = "oxivault-sim")]
 #[command(about = "OxiVault Hardware Wallet Simulator", long_about = None)]
@@ -86,8 +88,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tui_signing::run_signing_workflow()?;
             }
             Commands::Enhanced => {
-                // Run the enhanced TUI (placeholder for now)
-                println!("Enhanced TUI with QR export - coming soon!");
+                // Run the enhanced TUI
+                run_enhanced_tui()?;
             }
         },
     }
@@ -158,5 +160,55 @@ fn validate_mnemonic(mnemonic: &str) -> Result<(), Box<dyn std::error::Error>> {
         println!("- The checksum is valid");
         println!("- The phrase has 12, 15, 18, 21, or 24 words");
     }
+    Ok(())
+}
+
+fn run_enhanced_tui() -> Result<(), Box<dyn std::error::Error>> {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::{backend::CrosstermBackend, Terminal};
+    use std::io;
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create PSBT export state with dummy data for demo
+    let mut export_state = PsbtExportState::new();
+    let dummy_psbt = b"cHNidP8BAHUCAAAAASaBcTce3/KF6Tet7qSze3gADAVmy7OtZGQXE8pCFxv2AAAAAAD+////AtPf9QUAAAAAGXapFNDFmQPFusKGh2DpD9UhpGZap2UgiKwA4fUFAAAAABepFDVF5uM7gyxHBQ8k0+65PJwDlIvHh7MuEwAAAQD9pQEBAAAAAAECiaPHHqtNIOA3G7ukzGmPopXJRjr6Ljl/hTPMti+VZ+UBAAAAFxYAFL4Y0VKpsBIDna89p95PUzSe7LmF/////4b4qkOnHf8USIk6UwpyN+9rRgi7st0tAXHmOuxqSJC0AQAAABcWABT+Pp7xp0XpdNkCxDVZQ6vLNL1TU/////";
+    export_state.generate_for_psbt(dummy_psbt)?;
+
+    // Main event loop
+    loop {
+        terminal.draw(|f| {
+            tui_enhanced::draw_psbt_export(&export_state, f, f.size());
+        })?;
+
+        // Auto-advance animation
+        export_state.maybe_advance();
+
+        // Handle input with timeout for animation
+        if event::poll(std::time::Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                if let Some(KeyCode::Esc) =
+                    tui_enhanced::handle_psbt_export_input(&mut export_state, key.code)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen,)?;
+    terminal.show_cursor()?;
+
     Ok(())
 }

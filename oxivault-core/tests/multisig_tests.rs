@@ -15,17 +15,12 @@ use oxivault_core::{
 };
 
 fn create_test_cosigner(name: &str, seed: u8) -> CosignerInfo {
-    let xprv = ExtendedPrivKey::from_str(
-        "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu"
-    ).unwrap();
+    // Create different private keys based on seed
+    let seed_bytes = [seed; 32];
+    let xprv = ExtendedPrivKey::new_master(Network::Bitcoin, &seed_bytes).unwrap();
 
     let secp = Secp256k1::new();
-    let mut xpub = Xpub::from_priv(&secp, &xprv);
-
-    // Modify slightly to create different keys
-    let mut key_bytes = xpub.public_key.serialize();
-    key_bytes[0] = seed;
-    xpub.public_key = bitcoin::secp256k1::PublicKey::from_slice(&key_bytes).unwrap();
+    let xpub = Xpub::from_priv(&secp, &xprv);
 
     CosignerInfo {
         name: name.to_string(),
@@ -96,6 +91,7 @@ fn test_multisig_descriptor() {
     let descriptor = config.descriptor();
 
     // Check descriptor format
+    println!("Descriptor: {}", descriptor);
     assert!(descriptor.starts_with("wsh(multi(2,"));
     assert!(descriptor.contains("/<0;1>/*"));
     assert!(descriptor.ends_with("))"));

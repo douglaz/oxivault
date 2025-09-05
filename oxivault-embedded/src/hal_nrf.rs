@@ -6,26 +6,65 @@
 
 use crate::{
     drivers::ssd1306::{I2cInterface, Rotation, Ssd1306, TextSize},
-    hal::{Button, Display, HardwareAbstractionLayer, SecureElement, StorageDevice},
+    hal::{
+        Button, ButtonPress, Display, Error, HardwareAbstractionLayer, SecureElement, StorageDevice,
+    },
 };
-use core::fmt::Write;
 use defmt::*;
+use embassy_nrf::bind_interrupts;
 use embassy_nrf::{
-    gpio::{Input, Level, Output, OutputDrive, Pin, Pull},
+    gpio::{Input, Pull},
     peripherals,
     twim::{self, Twim},
-    usb::{self, Driver},
+    usb::{self, vbus_detect, Driver},
 };
 use embassy_time::Timer;
-use embedded_hal_async::{delay::DelayNs, i2c::I2c};
 use heapless::String;
+
+// Bind interrupts for peripherals
+bind_interrupts!(struct Irqs {
+    SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => twim::InterruptHandler<peripherals::TWISPI0>;
+    USBD => usb::InterruptHandler<peripherals::USBD>;
+    POWER_CLOCK => usb::vbus_detect::InterruptHandler;
+});
+
+/// Dummy SPI/CS types for storage (not implemented yet)
+pub struct DummySpi;
+pub struct DummyCs;
+
+impl embedded_hal::spi::ErrorType for DummySpi {
+    type Error = core::convert::Infallible;
+}
+
+impl embedded_hal_async::spi::SpiDevice for DummySpi {
+    async fn transaction(
+        &mut self,
+        _operations: &mut [embedded_hal_async::spi::Operation<'_, u8>],
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl embedded_hal::digital::ErrorType for DummyCs {
+    type Error = core::convert::Infallible;
+}
+
+impl embedded_hal::digital::OutputPin for DummyCs {
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
 
 /// nRF52840 HAL implementation
 pub struct Nrf52840Hal {
     display: Option<Nrf52840Display>,
     buttons: ButtonArray,
-    storage: Option<SdCard>,
-    secure_element: Option<Atecc608a>,
+    storage: Option<SdCard<DummySpi, DummyCs>>,
+    secure_element: Option<Atecc608a<Twim<'static, peripherals::TWISPI0>>>,
 }
 
 impl Nrf52840Hal {
@@ -43,7 +82,7 @@ impl Nrf52840Hal {
 
         // Configure I2C for display
         let config = twim::Config::default();
-        let twim = Twim::new(p, twim::Irqs, sda_pin, scl_pin, config);
+        let twim = Twim::new(p, Irqs, sda_pin, scl_pin, config);
 
         // Initialize SSD1306 display
         let i2c_interface = I2cInterface::new(twim, 0x3C); // Common I2C address
@@ -51,7 +90,7 @@ impl Nrf52840Hal {
 
         // Initialize display
         if let Err(e) = ssd1306.init().await {
-            error!("Failed to initialize display: {:?}", e);
+            error!("Failed to initialize display: {}", defmt::Debug2Format(&e));
         }
 
         let display = Nrf52840Display {
@@ -84,8 +123,8 @@ impl Nrf52840Hal {
 impl HardwareAbstractionLayer for Nrf52840Hal {
     type Display = Nrf52840Display;
     type Button = ButtonArray;
-    type Storage = SdCard;
-    type SecureElement = Atecc608a;
+    type Storage = SdCard<DummySpi, DummyCs>;
+    type SecureElement = Atecc608a<Twim<'static, peripherals::TWISPI0>>;
 
     fn display(&mut self) -> Option<&mut Self::Display> {
         self.display.as_mut()
@@ -111,39 +150,24 @@ pub struct Nrf52840Display {
 }
 
 impl Display for Nrf52840Display {
-    async fn clear(&mut self) -> Result<(), crate::hal::Error> {
-        self.driver
-            .clear()
-            .await
-            .map_err(|_| crate::hal::Error::DisplayError)
+    async fn clear(&mut self) -> Result<(), Error> {
+        self.driver.clear().await.map_err(|_| Error::DisplayError)
     }
 
-    async fn write_text(&mut self, text: &str, x: u16, y: u16) -> Result<(), crate::hal::Error> {
+    async fn write_text(&mut self, text: &str, x: u16, y: u16) -> Result<(), Error> {
         self.driver
             .draw_text(text, x as i32, y as i32, TextSize::Small);
-        self.driver
-            .flush()
-            .await
-            .map_err(|_| crate::hal::Error::DisplayError)
+        self.driver.flush().await.map_err(|_| Error::DisplayError)
     }
 
-    async fn show_qr(&mut self, data: &[u8]) -> Result<(), crate::hal::Error> {
-        // Center QR code on display
-        let x_offset = (128 - 50) / 2; // Assuming 50x50 QR with scale 2
-        let y_offset = (64 - 50) / 2;
-
-        self.driver.draw_qr(data, x_offset, y_offset, 2);
-        self.driver
-            .flush()
-            .await
-            .map_err(|_| crate::hal::Error::DisplayError)
+    #[cfg(feature = "qr")]
+    async fn show_qr(&mut self, data: &[u8]) -> Result<(), Error> {
+        // QR code rendering would go here
+        // For now, just display text
+        self.write_text("[QR Code]", 40, 28).await
     }
 
-    async fn show_menu(
-        &mut self,
-        items: &[&str],
-        selected: usize,
-    ) -> Result<(), crate::hal::Error> {
+    async fn show_menu(&mut self, items: &[&str], selected: usize) -> Result<(), Error> {
         self.clear().await?;
 
         let items_per_page = 5;
@@ -171,10 +195,7 @@ impl Display for Nrf52840Display {
             }
         }
 
-        self.driver
-            .flush()
-            .await
-            .map_err(|_| crate::hal::Error::DisplayError)
+        self.driver.flush().await.map_err(|_| Error::DisplayError)
     }
 }
 
@@ -187,7 +208,7 @@ pub struct ButtonArray {
 }
 
 impl Button for ButtonArray {
-    async fn wait_press(&mut self) -> crate::hal::ButtonPress {
+    async fn wait_press(&mut self) -> ButtonPress {
         loop {
             if self.confirm.is_low() {
                 // Debounce
@@ -195,7 +216,7 @@ impl Button for ButtonArray {
                 while self.confirm.is_low() {
                     Timer::after_millis(10).await;
                 }
-                return crate::hal::ButtonPress::Confirm;
+                return ButtonPress::Confirm;
             }
 
             if self.cancel.is_low() {
@@ -203,7 +224,7 @@ impl Button for ButtonArray {
                 while self.cancel.is_low() {
                     Timer::after_millis(10).await;
                 }
-                return crate::hal::ButtonPress::Cancel;
+                return ButtonPress::Cancel;
             }
 
             if self.up.is_low() {
@@ -211,7 +232,7 @@ impl Button for ButtonArray {
                 while self.up.is_low() {
                     Timer::after_millis(10).await;
                 }
-                return crate::hal::ButtonPress::Up;
+                return ButtonPress::Up;
             }
 
             if self.down.is_low() {
@@ -219,19 +240,19 @@ impl Button for ButtonArray {
                 while self.down.is_low() {
                     Timer::after_millis(10).await;
                 }
-                return crate::hal::ButtonPress::Down;
+                return ButtonPress::Down;
             }
 
             Timer::after_millis(10).await;
         }
     }
 
-    fn is_pressed(&self, button: crate::hal::ButtonPress) -> bool {
+    fn is_pressed(&self, button: ButtonPress) -> bool {
         match button {
-            crate::hal::ButtonPress::Confirm => self.confirm.is_low(),
-            crate::hal::ButtonPress::Cancel => self.cancel.is_low(),
-            crate::hal::ButtonPress::Up => self.up.is_low(),
-            crate::hal::ButtonPress::Down => self.down.is_low(),
+            ButtonPress::Confirm => self.confirm.is_low(),
+            ButtonPress::Cancel => self.cancel.is_low(),
+            ButtonPress::Up => self.up.is_low(),
+            ButtonPress::Down => self.down.is_low(),
         }
     }
 }
@@ -246,7 +267,7 @@ pub struct SdCard<SPI, CS> {
 impl<SPI, CS> SdCard<SPI, CS>
 where
     SPI: embedded_hal_async::spi::SpiDevice,
-    CS: embedded_hal_async::digital::OutputPin,
+    CS: embedded_hal::digital::OutputPin,
 {
     pub fn new(spi: SPI, cs: CS) -> Self {
         Self {
@@ -254,27 +275,24 @@ where
         }
     }
 
-    pub async fn init(&mut self) -> Result<(), crate::hal::Error> {
-        self.inner
-            .init()
-            .await
-            .map_err(|_| crate::hal::Error::StorageError)
+    pub async fn init(&mut self) -> Result<(), Error> {
+        self.inner.init().await.map_err(|_| Error::StorageError)
     }
 }
 
 impl<SPI, CS> StorageDevice for SdCard<SPI, CS>
 where
     SPI: embedded_hal_async::spi::SpiDevice,
-    CS: embedded_hal_async::digital::OutputPin,
+    CS: embedded_hal::digital::OutputPin,
 {
-    async fn read(&mut self, offset: u32, buffer: &mut [u8]) -> Result<(), crate::hal::Error> {
+    async fn read(&mut self, offset: u32, buffer: &mut [u8]) -> Result<(), Error> {
         // Read blocks based on offset
         let block_num = offset / 512;
         let block_data = self
             .inner
             .read_block(block_num)
             .await
-            .map_err(|_| crate::hal::Error::StorageError)?;
+            .map_err(|_| Error::StorageError)?;
 
         let start = (offset % 512) as usize;
         let len = buffer.len().min(512 - start);
@@ -282,7 +300,7 @@ where
         Ok(())
     }
 
-    async fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), crate::hal::Error> {
+    async fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), Error> {
         // Write blocks based on offset
         let block_num = offset / 512;
         let mut block_data = [0u8; 512];
@@ -293,7 +311,7 @@ where
             self.inner
                 .write_block(block_num, &block_data)
                 .await
-                .map_err(|_| crate::hal::Error::StorageError)?;
+                .map_err(|_| Error::StorageError)?;
         }
         Ok(())
     }
@@ -314,19 +332,19 @@ impl<I2C> Atecc608a<I2C>
 where
     I2C: embedded_hal_async::i2c::I2c,
 {
-    pub async fn new(i2c: I2C) -> Result<Self, crate::hal::Error> {
+    pub async fn new(i2c: I2C) -> Result<Self, Error> {
         let driver = Atecc608Driver::new(i2c);
         let wallet = SecureWallet::new(driver)
             .await
-            .map_err(|_| crate::hal::Error::SecureElementError)?;
+            .map_err(|_| Error::SecureError)?;
         Ok(Self { inner: wallet })
     }
 
-    pub async fn initialize(&mut self) -> Result<(), crate::hal::Error> {
+    pub async fn initialize(&mut self) -> Result<(), Error> {
         self.inner
             .initialize()
             .await
-            .map_err(|_| crate::hal::Error::SecureElementError)
+            .map_err(|_| Error::SecureError)
     }
 }
 
@@ -334,19 +352,19 @@ impl<I2C> SecureElement for Atecc608a<I2C>
 where
     I2C: embedded_hal_async::i2c::I2c,
 {
-    async fn random(&mut self, buffer: &mut [u8]) -> Result<(), crate::hal::Error> {
+    async fn random(&mut self, buffer: &mut [u8]) -> Result<(), Error> {
         let entropy = self
             .inner
             .get_entropy(buffer.len())
             .await
-            .map_err(|_| crate::hal::Error::SecureElementError)?;
+            .map_err(|_| Error::SecureError)?;
         buffer.copy_from_slice(&entropy);
         Ok(())
     }
 
-    async fn sign(&mut self, message: &[u8]) -> Result<[u8; 64], crate::hal::Error> {
+    async fn sign(&mut self, message: &[u8]) -> Result<[u8; 64], Error> {
         if message.len() != 32 {
-            return Err(crate::hal::Error::InvalidParameter);
+            return Err(Error::InvalidParameter);
         }
 
         let mut hash = [0u8; 32];
@@ -355,16 +373,12 @@ where
         self.inner
             .sign_bitcoin_transaction(&hash)
             .await
-            .map_err(|_| crate::hal::Error::SecureElementError)
+            .map_err(|_| Error::SecureError)
     }
 
-    async fn verify(
-        &mut self,
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<bool, crate::hal::Error> {
+    async fn verify(&mut self, message: &[u8], signature: &[u8]) -> Result<bool, Error> {
         if message.len() != 32 || signature.len() != 64 {
-            return Err(crate::hal::Error::InvalidParameter);
+            return Err(Error::InvalidParameter);
         }
 
         // For verification, we'd need the public key - simplified for now
@@ -375,13 +389,9 @@ where
 /// USB implementation for nRF52840
 pub fn init_usb(
     p: peripherals::USBD,
-) -> Driver<'static, peripherals::USBD, usb::vbus_detect::HardwareVbusDetect> {
+) -> Driver<'static, peripherals::USBD, vbus_detect::HardwareVbusDetect> {
     // Create USB driver
-    Driver::new(
-        p,
-        usb::Irqs,
-        usb::vbus_detect::HardwareVbusDetect::new(usb::vbus_detect::Irqs),
-    )
+    Driver::new(p, Irqs, vbus_detect::HardwareVbusDetect::new(Irqs))
 }
 
 #[cfg(test)]

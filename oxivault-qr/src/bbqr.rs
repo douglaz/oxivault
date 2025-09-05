@@ -190,8 +190,7 @@ impl BBQrEncoder {
         let encoded_data = self.encode_data(data)?;
 
         // Calculate number of parts needed
-        let total_parts =
-            ((encoded_data.len() + self.max_fragment_size - 1) / self.max_fragment_size) as u16;
+        let total_parts = encoded_data.len().div_ceil(self.max_fragment_size) as u16;
 
         if total_parts > 9999 {
             return Err("Data too large for BBQr encoding");
@@ -331,6 +330,12 @@ pub struct BBQrDecoder {
     header: Option<BBQrHeader>,
 }
 
+impl Default for BBQrDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BBQrDecoder {
     /// Create a new decoder
     pub fn new() -> Self {
@@ -409,10 +414,8 @@ impl BBQrDecoder {
 
         // Combine parts
         let mut combined = Vec::new();
-        for part in &self.parts {
-            if let Some(data) = part {
-                combined.extend_from_slice(data);
-            }
+        for data in self.parts.iter().flatten() {
+            combined.extend_from_slice(data);
         }
 
         // Truncate to exact data length (important for Z85 which pads to 4-byte boundaries)
@@ -423,7 +426,7 @@ impl BBQrDecoder {
         hasher.update(&combined);
         let hash = hasher.finalize();
 
-        if &hash[0..4] != header.checksum {
+        if hash[0..4] != header.checksum {
             return Err("Checksum verification failed");
         }
 

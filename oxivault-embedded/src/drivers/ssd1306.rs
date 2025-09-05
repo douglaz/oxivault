@@ -6,13 +6,8 @@
 #![no_std]
 
 use defmt::*;
-use embedded_graphics_core::{
-    geometry::{Point, Size},
-    pixelcolor::BinaryColor,
-    prelude::*,
-    Pixel,
-};
-use embedded_hal_async::{delay::DelayNs, i2c::I2c, spi::SpiDevice};
+use embedded_graphics_core::{geometry::Size, pixelcolor::BinaryColor, prelude::*, Pixel};
+use embedded_hal_async::{i2c::I2c, spi::SpiDevice};
 use heapless::Vec;
 
 /// Display size
@@ -330,7 +325,11 @@ where
                     if bit == 1 {
                         for sy in 0..scale {
                             for sx in 0..scale {
-                                self.set_pixel(x + col * scale + sx, y + row * scale + sy, true);
+                                self.set_pixel(
+                                    x + (col as u32) * scale + sx,
+                                    y + (row as u32) * scale + sy,
+                                    true,
+                                );
                             }
                         }
                     }
@@ -418,7 +417,7 @@ mod tests {
         let page = 20 / 8; // = 2
         let bit = 20 % 8; // = 4
         let index = (page * 128 + 10) as usize;
-        assert_eq!(display.buffer[index] & (1 << bit), 1 << bit);
+        core::assert_eq!(display.buffer[index] & (1 << bit), 1 << bit);
     }
 
     struct MockInterface;

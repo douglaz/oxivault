@@ -74,7 +74,7 @@ impl ConstantTimeVerifier {
 
         // More dummy operations
         let mut dummy2 = Sha256::new();
-        dummy2.update(&self.expected_hash);
+        dummy2.update(self.expected_hash);
         let _dummy_result2 = dummy2.finalize();
 
         result.into()

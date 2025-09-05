@@ -27,6 +27,12 @@ pub struct BBQrQrGenerator {
     preferred_version: Option<Version>,
 }
 
+impl Default for BBQrQrGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BBQrQrGenerator {
     /// Create a new BBQr QR generator with defaults
     pub fn new() -> Self {
@@ -90,7 +96,7 @@ impl BBQrQrGenerator {
     /// Select optimal encoding type based on data characteristics
     fn select_encoding_type(&self, data: &[u8]) -> EncodingType {
         // Check if data is mostly ASCII printable
-        let ascii_count = data.iter().filter(|&&b| b >= 32 && b <= 126).count();
+        let ascii_count = data.iter().filter(|&&b| (32..=126).contains(&b)).count();
         let ascii_ratio = ascii_count as f32 / data.len() as f32;
 
         if ascii_ratio > 0.9 {
@@ -194,6 +200,12 @@ impl BBQrAnimator {
 pub struct BBQrScanner {
     decoder: BBQrDecoder,
     scanned_parts: Vec<String>,
+}
+
+impl Default for BBQrScanner {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BBQrScanner {

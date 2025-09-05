@@ -4,10 +4,15 @@
 //! Supporting both SD card and QR code backup methods
 
 use crate::{entropy::get_hardware_entropy, Error, Result};
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Key, Nonce,
+};
 use bitcoin::bip32::{Fingerprint, Xpriv};
 use bitcoin::secp256k1::Secp256k1;
 use hmac::{Hmac, Mac};
-use sha2::{Digest, Sha256};
+use pbkdf2::pbkdf2_hmac;
+use sha2::Sha256;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -17,9 +22,15 @@ use alloc::{
     vec::Vec,
 };
 #[cfg(feature = "std")]
-use std::format;
+use std::{
+    format,
+    fs::{self, File},
+    io::{Read, Write},
+    path::Path,
+};
 
 /// AES-256-GCM for encryption (simplified for demo)
+#[allow(dead_code)]
 type HmacSha256 = Hmac<Sha256>;
 
 /// Backup format version
@@ -37,8 +48,10 @@ pub struct BackupContainer {
     pub fingerprint: Fingerprint,
     /// Encrypted seed data
     pub encrypted_seed: Vec<u8>,
-    /// Authentication tag
-    pub auth_tag: [u8; 32],
+    /// Authentication tag (from AES-GCM)
+    pub auth_tag: [u8; 16],
+    /// Nonce for AES-GCM encryption
+    pub nonce: [u8; 12],
     /// Salt for key derivation
     pub salt: [u8; 32],
     /// Iteration count for PBKDF2
@@ -68,6 +81,12 @@ pub struct BackupManager {
     sequence: u32,
 }
 
+impl Default for BackupManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BackupManager {
     /// Create a new backup manager
     pub fn new() -> Self {
@@ -85,6 +104,10 @@ impl BackupManager {
         let mut salt = [0u8; 32];
         get_hardware_entropy(&mut salt)?;
 
+        // Generate random nonce for AES-GCM
+        let mut nonce = [0u8; 12];
+        get_hardware_entropy(&mut nonce)?;
+
         // Derive encryption key from passphrase using PBKDF2
         let iterations = 100_000;
         let key = Self::derive_key(passphrase.as_bytes(), &salt, iterations);
@@ -92,11 +115,8 @@ impl BackupManager {
         // Serialize the private key
         let seed_data = xpriv.encode();
 
-        // Encrypt seed data (simplified - real implementation needs AES-GCM)
-        let encrypted_seed = Self::encrypt_data(&seed_data, &key)?;
-
-        // Generate authentication tag
-        let auth_tag = Self::generate_auth_tag(&encrypted_seed, &key);
+        // Encrypt seed data using AES-256-GCM
+        let (encrypted_seed, auth_tag) = Self::encrypt_data(&seed_data, &key, &nonce)?;
 
         self.sequence += 1;
 
@@ -107,6 +127,7 @@ impl BackupManager {
             fingerprint: xpriv.fingerprint(&secp),
             encrypted_seed,
             auth_tag,
+            nonce,
             salt,
             iterations,
             timestamp: Self::current_timestamp(),
@@ -127,16 +148,13 @@ impl BackupManager {
         // Derive decryption key
         let key = Self::derive_key(passphrase.as_bytes(), &container.salt, container.iterations);
 
-        // Verify authentication tag
-        let expected_tag = Self::generate_auth_tag(&container.encrypted_seed, &key);
-        if expected_tag != container.auth_tag {
-            return Err(Error::BackupError(
-                "Invalid passphrase or corrupted backup".to_string(),
-            ));
-        }
-
-        // Decrypt seed data
-        let seed_data = Self::decrypt_data(&container.encrypted_seed, &key)?;
+        // Decrypt seed data with authentication
+        let seed_data = Self::decrypt_data(
+            &container.encrypted_seed,
+            &key,
+            &container.nonce,
+            &container.auth_tag,
+        )?;
 
         // Reconstruct extended private key
         let xpriv = Xpriv::decode(&seed_data)
@@ -155,40 +173,54 @@ impl BackupManager {
 
     /// Derive encryption key using PBKDF2
     fn derive_key(passphrase: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
-        // Simplified PBKDF2 - real implementation needs proper PBKDF2
-        let mut hasher = Sha256::new();
-        hasher.update(passphrase);
-        hasher.update(salt);
-
-        let mut result = hasher.finalize();
-        for _ in 1..iterations {
-            let mut hasher = Sha256::new();
-            hasher.update(&result);
-            result = hasher.finalize();
-        }
-
         let mut key = [0u8; 32];
-        key.copy_from_slice(&result);
+        pbkdf2_hmac::<Sha256>(passphrase, salt, iterations, &mut key);
         key
     }
 
-    /// Encrypt data (simplified XOR for demo - use AES-GCM in production)
-    fn encrypt_data(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
-        let mut encrypted = Vec::with_capacity(data.len());
-        for (i, byte) in data.iter().enumerate() {
-            encrypted.push(byte ^ key[i % 32]);
-        }
-        Ok(encrypted)
+    /// Encrypt data using AES-256-GCM
+    fn encrypt_data(data: &[u8], key: &[u8; 32], nonce: &[u8; 12]) -> Result<(Vec<u8>, [u8; 16])> {
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+        let nonce = Nonce::from_slice(nonce);
+
+        let ciphertext = cipher
+            .encrypt(nonce, data)
+            .map_err(|e| Error::BackupError(format!("Encryption failed: {e}")))?;
+
+        // AES-GCM appends the auth tag to the ciphertext
+        // We need to separate them
+        let (encrypted, tag) = ciphertext.split_at(ciphertext.len() - 16);
+        let mut auth_tag = [0u8; 16];
+        auth_tag.copy_from_slice(tag);
+
+        Ok((encrypted.to_vec(), auth_tag))
     }
 
-    /// Decrypt data (simplified XOR for demo - use AES-GCM in production)
-    fn decrypt_data(encrypted: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
-        Self::encrypt_data(encrypted, key) // XOR is symmetric
+    /// Decrypt data using AES-256-GCM
+    fn decrypt_data(
+        encrypted: &[u8],
+        key: &[u8; 32],
+        nonce: &[u8; 12],
+        auth_tag: &[u8; 16],
+    ) -> Result<Vec<u8>> {
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+        let nonce = Nonce::from_slice(nonce);
+
+        // Reconstruct the ciphertext with auth tag
+        let mut ciphertext = encrypted.to_vec();
+        ciphertext.extend_from_slice(auth_tag);
+
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext.as_ref())
+            .map_err(|e| Error::BackupError(format!("Decryption failed: {e}")))?;
+
+        Ok(plaintext)
     }
 
     /// Generate authentication tag using HMAC-SHA256
+    #[allow(dead_code)]
     fn generate_auth_tag(data: &[u8], key: &[u8; 32]) -> [u8; 32] {
-        let mut mac = HmacSha256::new_from_slice(key).unwrap();
+        let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(key).unwrap();
         mac.update(data);
         let result = mac.finalize();
         let mut tag = [0u8; 32];
@@ -219,10 +251,43 @@ impl SdCardBackup {
     pub async fn write_backup(&self, container: &BackupContainer) -> Result<()> {
         let data = self.serialize_container(container)?;
 
-        // In real implementation, write to SD card via HAL
-        // For now, just validate the data
+        // Validate backup size
         if data.len() > 1024 * 1024 {
             return Err(Error::BackupError("Backup too large".to_string()));
+        }
+
+        #[cfg(feature = "std")]
+        {
+            // Create backup directory if it doesn't exist
+            let backup_dir = Path::new(&self.path);
+            fs::create_dir_all(backup_dir).map_err(|e| {
+                Error::BackupError(format!("Failed to create backup directory: {e}"))
+            })?;
+
+            // Generate filename with timestamp and fingerprint
+            let filename = format!(
+                "backup_{:08x}_{}.ovb",
+                u32::from_be_bytes(container.fingerprint.to_bytes()),
+                container.timestamp
+            );
+
+            let file_path = backup_dir.join(filename);
+
+            // Write backup data to file
+            let mut file = File::create(&file_path)
+                .map_err(|e| Error::BackupError(format!("Failed to create backup file: {e}")))?;
+
+            file.write_all(&data)
+                .map_err(|e| Error::BackupError(format!("Failed to write backup data: {e}")))?;
+
+            file.sync_all()
+                .map_err(|e| Error::BackupError(format!("Failed to sync backup file: {e}")))?;
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            // For embedded systems, this would use HAL layer for SD card access
+            // For now, just validate the data
         }
 
         Ok(())
@@ -230,22 +295,107 @@ impl SdCardBackup {
 
     /// Read backup from SD card
     pub async fn read_backup(&self, filename: &str) -> Result<BackupContainer> {
-        // In real implementation, read from SD card via HAL
-        // For now, return error
-        Err(Error::BackupError(
-            "SD card read not implemented".to_string(),
-        ))
+        #[cfg(feature = "std")]
+        {
+            let backup_dir = Path::new(&self.path);
+            let file_path = backup_dir.join(filename);
+
+            // Check if file exists
+            if !file_path.exists() {
+                return Err(Error::BackupError(format!(
+                    "Backup file not found: {filename}"
+                )));
+            }
+
+            // Read backup data from file
+            let mut file = File::open(&file_path)
+                .map_err(|e| Error::BackupError(format!("Failed to open backup file: {e}")))?;
+
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)
+                .map_err(|e| Error::BackupError(format!("Failed to read backup data: {e}")))?;
+
+            // Deserialize the container
+            self.deserialize_container(&data)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            // For embedded systems, this would use HAL layer for SD card access
+            Err(Error::BackupError(
+                "SD card read not available in embedded mode".to_string(),
+            ))
+        }
     }
 
     /// List available backups
     pub async fn list_backups(&self) -> Result<Vec<String>> {
-        // In real implementation, list files from SD card
-        Ok(Vec::new())
+        #[cfg(feature = "std")]
+        {
+            let backup_dir = Path::new(&self.path);
+
+            // Create directory if it doesn't exist
+            if !backup_dir.exists() {
+                fs::create_dir_all(backup_dir).map_err(|e| {
+                    Error::BackupError(format!("Failed to create backup directory: {e}"))
+                })?;
+                return Ok(Vec::new());
+            }
+
+            // List all .ovb files in the backup directory
+            let mut backups = Vec::new();
+            let entries = fs::read_dir(backup_dir)
+                .map_err(|e| Error::BackupError(format!("Failed to read backup directory: {e}")))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| {
+                    Error::BackupError(format!("Failed to read directory entry: {e}"))
+                })?;
+                let path = entry.path();
+
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("ovb") {
+                    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                        backups.push(filename.to_string());
+                    }
+                }
+            }
+
+            // Sort by filename (which includes timestamp)
+            backups.sort();
+            Ok(backups)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            // For embedded systems, this would use HAL layer for SD card access
+            Ok(Vec::new())
+        }
     }
 
     /// Delete backup file
     pub async fn delete_backup(&self, filename: &str) -> Result<()> {
-        // In real implementation, delete from SD card
+        #[cfg(feature = "std")]
+        {
+            let backup_dir = Path::new(&self.path);
+            let file_path = backup_dir.join(filename);
+
+            // Check if file exists
+            if !file_path.exists() {
+                return Err(Error::BackupError(format!(
+                    "Backup file not found: {filename}"
+                )));
+            }
+
+            // Delete the file
+            fs::remove_file(&file_path)
+                .map_err(|e| Error::BackupError(format!("Failed to delete backup file: {e}")))?;
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            // For embedded systems, this would use HAL layer for SD card access
+        }
+
         Ok(())
     }
 
@@ -264,6 +414,9 @@ impl SdCardBackup {
 
         // Write salt
         data.extend_from_slice(&container.salt);
+
+        // Write nonce
+        data.extend_from_slice(&container.nonce);
 
         // Write iterations (big endian)
         data.extend_from_slice(&container.iterations.to_be_bytes());
@@ -289,21 +442,138 @@ impl SdCardBackup {
 
     /// Deserialize backup container
     fn deserialize_container(&self, data: &[u8]) -> Result<BackupContainer> {
-        if data.len() < 100 {
-            return Err(Error::BackupError("Invalid backup data".to_string()));
+        // Minimum size check: magic(4) + version(1) + fingerprint(4) + salt(32) + nonce(12) + iterations(4) + timestamp(8) + seed_len(4) + auth_tag(16) + metadata_len(2)
+        const MIN_SIZE: usize = 4 + 1 + 4 + 32 + 12 + 4 + 8 + 4 + 16 + 2;
+        if data.len() < MIN_SIZE {
+            return Err(Error::BackupError(format!(
+                "Invalid backup data: too small ({} bytes, minimum {})",
+                data.len(),
+                MIN_SIZE
+            )));
         }
+
+        let mut offset = 0;
 
         // Check magic bytes
-        if &data[0..4] != &MAGIC_BYTES {
-            return Err(Error::BackupError("Invalid backup format".to_string()));
+        if data[offset..offset + 4] != MAGIC_BYTES {
+            return Err(Error::BackupError(
+                "Invalid backup format: wrong magic bytes".to_string(),
+            ));
         }
+        offset += 4;
 
-        // Parse fields (simplified)
-        // Real implementation needs proper parsing with bounds checking
+        // Parse version
+        let version = data[offset];
+        offset += 1;
 
-        Err(Error::BackupError(
-            "Deserialization not fully implemented".to_string(),
-        ))
+        // Parse fingerprint
+        let mut fingerprint_bytes = [0u8; 4];
+        fingerprint_bytes.copy_from_slice(&data[offset..offset + 4]);
+        let fingerprint = Fingerprint::from(fingerprint_bytes);
+        offset += 4;
+
+        // Parse salt
+        let mut salt = [0u8; 32];
+        salt.copy_from_slice(&data[offset..offset + 32]);
+        offset += 32;
+
+        // Parse nonce
+        let mut nonce = [0u8; 12];
+        nonce.copy_from_slice(&data[offset..offset + 12]);
+        offset += 12;
+
+        // Parse iterations
+        let iterations = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]);
+        offset += 4;
+
+        // Parse timestamp
+        let timestamp = u64::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
+        ]);
+        offset += 8;
+
+        // Parse encrypted seed length and data
+        if offset + 4 > data.len() {
+            return Err(Error::BackupError(
+                "Invalid backup data: truncated seed length".to_string(),
+            ));
+        }
+        let seed_len = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
+        offset += 4;
+
+        if offset + seed_len > data.len() {
+            return Err(Error::BackupError(format!(
+                "Invalid backup data: seed length {} exceeds available data",
+                seed_len
+            )));
+        }
+        let encrypted_seed = data[offset..offset + seed_len].to_vec();
+        offset += seed_len;
+
+        // Parse auth tag
+        if offset + 16 > data.len() {
+            return Err(Error::BackupError(
+                "Invalid backup data: truncated auth tag".to_string(),
+            ));
+        }
+        let mut auth_tag = [0u8; 16];
+        auth_tag.copy_from_slice(&data[offset..offset + 16]);
+        offset += 16;
+
+        // Parse metadata length and name
+        if offset + 2 > data.len() {
+            return Err(Error::BackupError(
+                "Invalid backup data: truncated metadata length".to_string(),
+            ));
+        }
+        let metadata_len = u16::from_be_bytes([data[offset], data[offset + 1]]) as usize;
+        offset += 2;
+
+        if offset + metadata_len > data.len() {
+            return Err(Error::BackupError(format!(
+                "Invalid backup data: metadata length {} exceeds available data",
+                metadata_len
+            )));
+        }
+        let name = String::from_utf8(data[offset..offset + metadata_len].to_vec())
+            .map_err(|e| Error::BackupError(format!("Invalid metadata name: {e}")))?;
+
+        // Create metadata with defaults for missing fields
+        let metadata = BackupMetadata {
+            name,
+            derivation_paths: Vec::new(),
+            network: "bitcoin".to_string(),
+            sequence: 0,
+        };
+
+        Ok(BackupContainer {
+            version,
+            fingerprint,
+            encrypted_seed,
+            auth_tag,
+            nonce,
+            salt,
+            iterations,
+            timestamp,
+            metadata,
+        })
     }
 }
 
@@ -361,13 +631,13 @@ impl QrBackup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::bip32::ExtendedPrivKey;
+    use bitcoin::bip32::Xpriv;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::Network;
 
     #[test]
     fn test_backup_creation() {
-        let xpriv = ExtendedPrivKey::new_master(Network::Bitcoin, &[0; 32]).unwrap();
+        let xpriv = Xpriv::new_master(Network::Bitcoin, &[0; 32]).unwrap();
         let mut manager = BackupManager::new();
 
         let metadata = BackupMetadata {
@@ -387,7 +657,7 @@ mod tests {
 
     #[test]
     fn test_backup_restore() {
-        let xpriv = ExtendedPrivKey::new_master(Network::Bitcoin, &[0; 32]).unwrap();
+        let xpriv = Xpriv::new_master(Network::Bitcoin, &[0; 32]).unwrap();
         let mut manager = BackupManager::new();
 
         let metadata = BackupMetadata {
@@ -409,7 +679,7 @@ mod tests {
 
     #[test]
     fn test_wrong_passphrase() {
-        let xpriv = ExtendedPrivKey::new_master(Network::Bitcoin, &[0; 32]).unwrap();
+        let xpriv = Xpriv::new_master(Network::Bitcoin, &[0; 32]).unwrap();
         let mut manager = BackupManager::new();
 
         let metadata = BackupMetadata {
@@ -425,9 +695,10 @@ mod tests {
         let result = manager.restore_backup(&backup, "wrong_password");
 
         assert!(result.is_err());
+        // AES-GCM will fail decryption with wrong passphrase
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid passphrase"));
+            .contains("Decryption failed"));
     }
 }

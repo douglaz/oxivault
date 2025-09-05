@@ -88,7 +88,7 @@ impl MiniscriptCompiler {
     /// Compile a policy into Miniscript
     pub fn compile(policy: &Policy) -> Result<Miniscript> {
         match policy {
-            Policy::Key(pk) => Ok(Miniscript::Pk(pk.clone())),
+            Policy::Key(pk) => Ok(Miniscript::Pk(*pk)),
 
             Policy::Threshold(k, subs) => {
                 if *k == 0 || *k > subs.len() {

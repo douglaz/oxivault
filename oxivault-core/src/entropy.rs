@@ -39,7 +39,7 @@ pub struct DiceRoll(u8);
 impl DiceRoll {
     /// Create a new dice roll (1-6)
     pub fn new(value: u8) -> Result<Self> {
-        if value < 1 || value > 6 {
+        if !(1..=6).contains(&value) {
             return Err(Error::InvalidEntropy("Dice value must be 1-6".into()));
         }
         Ok(Self(value))
@@ -92,7 +92,7 @@ impl PlayingCard {
         if suit > 3 {
             return Err(Error::InvalidEntropy("Invalid suit (0-3)".into()));
         }
-        if rank < 1 || rank > 13 {
+        if !(1..=13).contains(&rank) {
             return Err(Error::InvalidEntropy("Invalid rank (1-13)".into()));
         }
         Ok(Self { suit, rank })
@@ -343,7 +343,7 @@ impl EntropyGenerator {
     /// Hash input data to entropy using double SHA-256
     fn hash_to_entropy(input: &[u8]) -> Vec<u8> {
         let hash1 = Sha256::digest(input);
-        let hash2 = Sha256::digest(&hash1);
+        let hash2 = Sha256::digest(hash1);
         hash2.to_vec()
     }
 

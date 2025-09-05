@@ -3,7 +3,7 @@
 //! Provides async SD card access for backup storage
 
 use embassy_time::{Duration, Timer};
-use embedded_hal_async::digital::OutputPin;
+use embedded_hal::digital::OutputPin;
 use embedded_hal_async::spi::SpiDevice;
 
 /// SD Card driver supporting SPI mode
@@ -15,6 +15,7 @@ pub struct SdCard<SPI, CS> {
 
 /// SD Card commands
 #[repr(u8)]
+#[derive(Clone, Copy)]
 enum Command {
     GoIdleState = 0,       // CMD0
     SendIfCond = 8,        // CMD8
@@ -55,7 +56,7 @@ where
     /// Initialize the SD card
     pub async fn init(&mut self) -> Result<(), SdError> {
         // Start with CS high
-        self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_high().map_err(|_| SdError::SpiError)?;
 
         // Send 80 clock pulses with CS high to initialize
         let dummy = [0xFF; 10];
@@ -65,18 +66,18 @@ where
             .map_err(|_| SdError::SpiError)?;
 
         // Send CMD0 (GO_IDLE_STATE) to reset card
-        self.cs.set_low().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_low().map_err(|_| SdError::SpiError)?;
 
         let r1 = self.send_command(Command::GoIdleState, 0).await?;
         if r1 != 0x01 {
-            self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+            self.cs.set_high().map_err(|_| SdError::SpiError)?;
             return Err(SdError::InitFailed);
         }
 
         // Send CMD8 (SEND_IF_COND) to check SD v2
         let r7 = self.send_command_r7(Command::SendIfCond, 0x1AA).await?;
         if r7.0 != 0x01 || r7.1 != 0x1AA {
-            self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+            self.cs.set_high().map_err(|_| SdError::SpiError)?;
             return Err(SdError::InitFailed);
         }
 
@@ -86,7 +87,7 @@ where
             // Send CMD55 (APP_CMD) first
             let r1 = self.send_command(Command::AppCmd, 0).await?;
             if r1 & 0xFE != 0 {
-                self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+                self.cs.set_high().map_err(|_| SdError::SpiError)?;
                 return Err(SdError::InitFailed);
             }
 
@@ -100,7 +101,7 @@ where
             }
 
             if retry == 0 {
-                self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+                self.cs.set_high().map_err(|_| SdError::SpiError)?;
                 return Err(SdError::TimeoutError);
             }
             retry -= 1;
@@ -116,12 +117,12 @@ where
         if !ccs {
             let r1 = self.send_command(Command::SetBlockLen, 512).await?;
             if r1 != 0x00 {
-                self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+                self.cs.set_high().map_err(|_| SdError::SpiError)?;
                 return Err(SdError::InitFailed);
             }
         }
 
-        self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_high().map_err(|_| SdError::SpiError)?;
         self.initialized = true;
 
         Ok(())
@@ -133,14 +134,14 @@ where
             return Err(SdError::CardNotReady);
         }
 
-        self.cs.set_low().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_low().map_err(|_| SdError::SpiError)?;
 
         // Send CMD17 (READ_SINGLE_BLOCK)
         let r1 = self
             .send_command(Command::ReadSingleBlock, block_num)
             .await?;
         if r1 != 0x00 {
-            self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+            self.cs.set_high().map_err(|_| SdError::SpiError)?;
             return Err(SdError::InvalidResponse);
         }
 
@@ -158,7 +159,7 @@ where
             }
 
             if retry == 0 {
-                self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+                self.cs.set_high().map_err(|_| SdError::SpiError)?;
                 return Err(SdError::TimeoutError);
             }
             retry -= 1;
@@ -180,7 +181,7 @@ where
             .await
             .map_err(|_| SdError::SpiError)?;
 
-        self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_high().map_err(|_| SdError::SpiError)?;
 
         Ok(data)
     }
@@ -191,14 +192,14 @@ where
             return Err(SdError::CardNotReady);
         }
 
-        self.cs.set_low().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_low().map_err(|_| SdError::SpiError)?;
 
         // Send CMD24 (WRITE_SINGLE_BLOCK)
         let r1 = self
             .send_command(Command::WriteSingleBlock, block_num)
             .await?;
         if r1 != 0x00 {
-            self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+            self.cs.set_high().map_err(|_| SdError::SpiError)?;
             return Err(SdError::InvalidResponse);
         }
 
@@ -225,7 +226,7 @@ where
 
         // Check if data was accepted (xxx00101)
         if (response[0] & 0x1F) != 0x05 {
-            self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+            self.cs.set_high().map_err(|_| SdError::SpiError)?;
             return Err(SdError::InvalidResponse);
         }
 
@@ -243,7 +244,7 @@ where
             }
 
             if retry == 0 {
-                self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+                self.cs.set_high().map_err(|_| SdError::SpiError)?;
                 return Err(SdError::TimeoutError);
             }
             retry -= 1;
@@ -251,7 +252,7 @@ where
             Timer::after(Duration::from_millis(1)).await;
         }
 
-        self.cs.set_high().await.map_err(|_| SdError::SpiError)?;
+        self.cs.set_high().map_err(|_| SdError::SpiError)?;
 
         Ok(())
     }
@@ -435,15 +436,21 @@ mod tests {
     struct MockSpi;
     struct MockPin;
 
+    impl embedded_hal::spi::ErrorType for MockSpi {
+        type Error = embedded_hal_async::spi::ErrorKind;
+    }
+
     impl embedded_hal_async::spi::SpiDevice for MockSpi {
-        async fn transaction<R>(
+        async fn transaction(
             &mut self,
             _operations: &mut [embedded_hal_async::spi::Operation<'_, u8>],
-        ) -> Result<R, embedded_hal_async::spi::ErrorKind>
-        where
-            R: Copy,
-        {
-            unimplemented!()
+        ) -> Result<(), embedded_hal_async::spi::ErrorKind> {
+            // Mock implementation - process operations sequentially
+            for _op in _operations.iter_mut() {
+                // In a real implementation, would handle Read/Write operations
+                // For testing, just return success
+            }
+            Ok(())
         }
 
         async fn read(
@@ -473,12 +480,16 @@ mod tests {
         }
     }
 
-    impl embedded_hal_async::digital::OutputPin for MockPin {
-        async fn set_high(&mut self) -> Result<(), embedded_hal_async::digital::ErrorKind> {
+    impl embedded_hal::digital::ErrorType for MockPin {
+        type Error = core::convert::Infallible;
+    }
+
+    impl embedded_hal::digital::OutputPin for MockPin {
+        fn set_high(&mut self) -> Result<(), Self::Error> {
             Ok(())
         }
 
-        async fn set_low(&mut self) -> Result<(), embedded_hal_async::digital::ErrorKind> {
+        fn set_low(&mut self) -> Result<(), Self::Error> {
             Ok(())
         }
     }

@@ -628,7 +628,7 @@ impl SigningApp {
             // QR display
             if export_state.current_index < export_state.qr_codes.len() {
                 let qr_text = &export_state.qr_codes[export_state.current_index];
-                let lines: Vec<Line> = qr_text.lines().map(|l| Line::from(l)).collect();
+                let lines: Vec<Line> = qr_text.lines().map(Line::from).collect();
 
                 let qr_display = Paragraph::new(lines).alignment(Alignment::Center);
                 f.render_widget(qr_display, chunks[1]);
@@ -917,12 +917,10 @@ impl SigningApp {
     }
 
     fn handle_signing_progress_key(&mut self, key: KeyCode) {
-        if self.signing_progress.is_complete {
-            if key == KeyCode::Enter {
-                // Generate QR codes for export
-                self.prepare_export();
-                self.screen = SigningScreen::ExportSigned;
-            }
+        if self.signing_progress.is_complete && key == KeyCode::Enter {
+            // Generate QR codes for export
+            self.prepare_export();
+            self.screen = SigningScreen::ExportSigned;
         }
     }
 
@@ -1015,7 +1013,7 @@ impl SigningApp {
                 Ok(qr_codes) => {
                     let ascii_codes: Vec<String> = qr_codes
                         .iter()
-                        .map(|qr| AsciiQrRenderer::render_compact(qr))
+                        .map(AsciiQrRenderer::render_compact)
                         .collect();
 
                     self.export_state = Some(PsbtExportState {

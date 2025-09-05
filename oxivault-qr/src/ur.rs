@@ -84,11 +84,17 @@ impl UrEncoder {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let digest = hasher.finalize();
+        println!(
+            "Encoding {} bytes with checksum: {:?}",
+            data.len(),
+            &digest[0..4]
+        );
 
         // For simplicity, we'll implement a basic partitioning scheme
         // A full implementation would use fountain codes (Luby transform codes)
         let parts = self.partition_data(data);
         let total_parts = parts.len();
+        println!("Split into {} parts", total_parts);
 
         let mut ur_parts = Vec::new();
 
@@ -99,6 +105,12 @@ impl UrEncoder {
                 data.len() as u32,
                 &digest[0..4],
                 part,
+            );
+            println!(
+                "Part {} raw data: {} bytes, with header: {} bytes",
+                seq_num,
+                part.len(),
+                part_data.len()
             );
 
             let bywords = self.to_bywords(&part_data);
@@ -187,7 +199,7 @@ impl UrEncoder {
             ]);
 
             // Calculate how many characters we need
-            let chars_needed = (remaining * 8 + 4) / 5; // Round up
+            let chars_needed = (remaining * 8).div_ceil(5); // Round up
 
             for j in (0..chars_needed).rev() {
                 let shift = j * 5 + (40 - chars_needed * 5);
@@ -207,6 +219,12 @@ pub struct UrDecoder {
     total_parts: Option<usize>,
     message_len: Option<usize>,
     checksum: Option<[u8; 4]>,
+}
+
+impl Default for UrDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UrDecoder {
@@ -296,6 +314,12 @@ impl UrDecoder {
 
                 // Store actual data (skip header)
                 let part_data = data[16..].to_vec();
+                println!(
+                    "Part {}: Storing {} bytes (from {} total)",
+                    seq_num,
+                    part_data.len(),
+                    data.len()
+                );
                 self.parts[seq_num - 1] = Some(part_data);
             } else {
                 self.parts[seq_num - 1] = Some(data);
@@ -319,11 +343,13 @@ impl UrDecoder {
         }
 
         let mut combined = Vec::new();
-        for part in &self.parts {
+        for (i, part) in self.parts.iter().enumerate() {
             if let Some(data) = part {
+                println!("Combining part {}: {} bytes", i, data.len());
                 combined.extend_from_slice(data);
             }
         }
+        println!("Total combined: {} bytes", combined.len());
 
         // For single-part messages, we don't have length metadata
         // so return as-is (caller needs to handle padding)
@@ -333,16 +359,23 @@ impl UrDecoder {
 
         // Truncate to message length if known (multi-part)
         if let Some(len) = self.message_len {
+            println!("Truncating from {} to {} bytes", combined.len(), len);
             combined.truncate(len);
         }
 
         // Verify checksum if available (multi-part)
         if let Some(expected_checksum) = self.checksum {
+            println!(
+                "Verifying checksum for {} bytes of combined data",
+                combined.len()
+            );
             let mut hasher = Sha256::new();
             hasher.update(&combined);
             let hash = hasher.finalize();
+            println!("Computed checksum: {:?}", &hash[0..4]);
+            println!("Expected checksum: {:?}", expected_checksum);
 
-            if &hash[0..4] != expected_checksum {
+            if hash[0..4] != expected_checksum {
                 return Err("Checksum verification failed");
             }
         }
@@ -402,7 +435,9 @@ impl UrDecoder {
             value <<= (8 - remaining) * 5;
 
             // Calculate how many bytes to extract
-            let bytes_to_extract = (remaining * 5 + 7) / 8;
+            // This needs to match the encoding: (remaining_bytes * 8 + 4) / 5 gives us chars
+            // So inverse: (remaining_chars * 5) / 8 gives us bytes (without rounding up)
+            let bytes_to_extract = (remaining * 5) / 8;
             let bytes = value.to_be_bytes();
 
             for i in 0..bytes_to_extract {
@@ -447,6 +482,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_bywords_roundtrip() -> Result<()> {
+        let encoder = UrEncoder::new(UrType::Bytes, 100);
+        let decoder = UrDecoder::new();
+
+        // Test exact roundtrip
+        let test_data = b"Hello, World!";
+        let encoded = encoder.to_bywords(test_data);
+        let decoded = decoder.from_bywords(&encoded)?;
+
+        println!("Original: {} bytes: {:?}", test_data.len(), test_data);
+        println!("Decoded:  {} bytes: {:?}", decoded.len(), &decoded[..]);
+
+        // Check if they match exactly
+        assert_eq!(test_data.len(), decoded.len(), "Length mismatch");
+        assert_eq!(test_data, &decoded[..test_data.len()], "Data mismatch");
+
+        Ok(())
+    }
+
+    #[test]
     fn test_ur_single_encode_decode() -> Result<()> {
         let data = b"Hello, UR!";
         let encoder = UrEncoder::new(UrType::Bytes, 100);
@@ -471,15 +526,25 @@ mod tests {
         let encoder = UrEncoder::new(UrType::Bytes, 20);
 
         let ur_parts = encoder.encode_multi(data)?;
+        println!(
+            "Encoded {} parts for {} bytes of data",
+            ur_parts.len(),
+            data.len()
+        );
         assert!(ur_parts.len() > 1);
 
         let mut decoder = UrDecoder::new();
-        for ur in &ur_parts {
+        for (i, ur) in ur_parts.iter().enumerate() {
+            println!("Adding part {}: {}", i, ur);
             decoder.add_ur(ur)?;
         }
 
         assert!(decoder.is_complete());
         let decoded = decoder.combine()?;
+        println!("Decoded {} bytes", decoded.len());
+        println!("Original: {:?}", data);
+        println!("Decoded:  {:?}", &decoded[..]);
+
         // The decoded data should match the original
         assert_eq!(decoded, data);
 
