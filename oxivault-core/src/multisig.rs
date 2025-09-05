@@ -313,7 +313,7 @@ impl PsbtCoordinator {
             }
 
             // Add all collected signatures
-            for (fingerprint, _sig) in &status.signatures {
+            for fingerprint in status.signatures.keys() {
                 // Find the public key for this fingerprint
                 if let Some(_cosigner) = self
                     .config

@@ -147,7 +147,7 @@ impl<H: HardwareWallet> WalletStateMachine<H> {
                     let mut display = heapless::String::<256>::new();
                     for (i, word) in words.iter().enumerate() {
                         use core::fmt::Write;
-                        let _ = write!(display, "{}. {}\n", i + 1, word);
+                        let _ = writeln!(display, "{}. {}", i + 1, word);
                         if (i + 1) % 4 == 0 {
                             self.hardware.display_text(&display).await;
                             self.hardware.wait_for_button().await;

@@ -312,7 +312,7 @@ impl PsbtParser {
     pub fn summarize(&self, analysis: &PsbtAnalysis) -> String {
         let mut summary = String::new();
 
-        summary.push_str(&"PSBT Analysis:\n".to_string());
+        summary.push_str("PSBT Analysis:\n");
         summary.push_str(&format!("  Network: {:?}\n", analysis.network));
         summary.push_str(&format!("  Version: {}\n", analysis.version));
         summary.push_str(&format!("  Locktime: {}\n", analysis.locktime));

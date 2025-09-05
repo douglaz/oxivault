@@ -397,7 +397,7 @@ where
 
         // Read data blocks
         let mut result = heapless::Vec::new();
-        let blocks_needed = (size + 511) / 512;
+        let blocks_needed = size.div_ceil(512);
 
         for i in 0..blocks_needed {
             let block = self.sd.read_block(base_block + 1 + i as u32).await?;

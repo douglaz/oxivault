@@ -15,7 +15,6 @@ use embassy_nrf::{bind_interrupts, peripherals::TWISPI0 as TWIM0, Peri};
 use embassy_nrf::{
     gpio::{Input, Pull},
     peripherals,
-    peripherals::TWISPI0,
     twim::{self, Twim},
     usb::{self, vbus_detect, Driver},
 };

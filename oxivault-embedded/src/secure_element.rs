@@ -345,7 +345,7 @@ where
         let _ = packet.push(command as u8);
 
         // Parameters (2 bytes)
-        if params.len() >= 1 {
+        if !params.is_empty() {
             let _ = packet.push(params[0]);
         } else {
             let _ = packet.push(0x00);
@@ -385,7 +385,7 @@ where
 
         // Parse response
         let length = response[0] as usize;
-        if length < 4 || length > 130 {
+        if !(4..=130).contains(&length) {
             return Err(SecureElementError::InvalidCommand);
         }
 
@@ -464,7 +464,7 @@ where
                 if (crc & 0x8000) != 0 {
                     crc = (crc << 1) ^ 0x8005;
                 } else {
-                    crc = crc << 1;
+                    crc <<= 1;
                 }
             }
         }
@@ -619,6 +619,12 @@ pub struct PinManager {
     max_attempts: u8,
     /// Stored PIN hash (simplified)
     pin_hash: Option<[u8; 32]>,
+}
+
+impl Default for PinManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PinManager {
