@@ -56,8 +56,6 @@ pub struct BackupContainer {
     pub salt: [u8; 32],
     /// Iteration count for PBKDF2
     pub iterations: u32,
-    /// Timestamp of backup creation
-    pub timestamp: u64,
     /// Optional metadata
     pub metadata: BackupMetadata,
 }
@@ -130,7 +128,6 @@ impl BackupManager {
             nonce,
             salt,
             iterations,
-            timestamp: Self::current_timestamp(),
             metadata,
         })
     }
@@ -227,12 +224,6 @@ impl BackupManager {
         tag.copy_from_slice(&result.into_bytes());
         tag
     }
-
-    /// Get current timestamp (simplified)
-    fn current_timestamp() -> u64 {
-        // In embedded, this would come from RTC or be user-provided
-        1700000000
-    }
 }
 
 /// SD Card backup interface
@@ -264,12 +255,20 @@ impl SdCardBackup {
                 Error::BackupError(format!("Failed to create backup directory: {e}"))
             })?;
 
-            // Generate filename with timestamp and fingerprint
-            let filename = format!(
-                "backup_{:08x}_{}.ovb",
-                u32::from_be_bytes(container.fingerprint.to_bytes()),
-                container.timestamp
+            // Generate filename with fingerprint and counter
+            // Use a simple counter suffix to allow multiple backups
+            let base_name = format!(
+                "backup_{:08x}",
+                u32::from_be_bytes(container.fingerprint.to_bytes())
             );
+
+            // Find a unique filename by adding a counter if needed
+            let mut filename = format!("{}.ovb", base_name);
+            let mut counter = 1;
+            while backup_dir.join(&filename).exists() {
+                filename = format!("{}_{}.ovb", base_name, counter);
+                counter += 1;
+            }
 
             let file_path = backup_dir.join(filename);
 
@@ -421,9 +420,6 @@ impl SdCardBackup {
         // Write iterations (big endian)
         data.extend_from_slice(&container.iterations.to_be_bytes());
 
-        // Write timestamp (big endian)
-        data.extend_from_slice(&container.timestamp.to_be_bytes());
-
         // Write encrypted seed length and data
         let seed_len = container.encrypted_seed.len() as u32;
         data.extend_from_slice(&seed_len.to_be_bytes());
@@ -442,8 +438,8 @@ impl SdCardBackup {
 
     /// Deserialize backup container
     fn deserialize_container(&self, data: &[u8]) -> Result<BackupContainer> {
-        // Minimum size check: magic(4) + version(1) + fingerprint(4) + salt(32) + nonce(12) + iterations(4) + timestamp(8) + seed_len(4) + auth_tag(16) + metadata_len(2)
-        const MIN_SIZE: usize = 4 + 1 + 4 + 32 + 12 + 4 + 8 + 4 + 16 + 2;
+        // Minimum size check: magic(4) + version(1) + fingerprint(4) + salt(32) + nonce(12) + iterations(4) + seed_len(4) + auth_tag(16) + metadata_len(2)
+        const MIN_SIZE: usize = 4 + 1 + 4 + 32 + 12 + 4 + 4 + 16 + 2;
         if data.len() < MIN_SIZE {
             return Err(Error::BackupError(format!(
                 "Invalid backup data: too small ({} bytes, minimum {})",
@@ -490,19 +486,6 @@ impl SdCardBackup {
             data[offset + 3],
         ]);
         offset += 4;
-
-        // Parse timestamp
-        let timestamp = u64::from_be_bytes([
-            data[offset],
-            data[offset + 1],
-            data[offset + 2],
-            data[offset + 3],
-            data[offset + 4],
-            data[offset + 5],
-            data[offset + 6],
-            data[offset + 7],
-        ]);
-        offset += 8;
 
         // Parse encrypted seed length and data
         if offset + 4 > data.len() {
@@ -571,7 +554,6 @@ impl SdCardBackup {
             nonce,
             salt,
             iterations,
-            timestamp,
             metadata,
         })
     }
