@@ -37,7 +37,7 @@ type HmacSha256 = Hmac<Sha256>;
 const BACKUP_VERSION: u8 = 1;
 
 /// Magic bytes for backup file identification
-const MAGIC_BYTES: [u8; 4] = [0x49, 0x52, 0x4F, 0x4E]; // "IRON"
+const MAGIC_BYTES: [u8; 4] = [0x4F, 0x58, 0x49, 0x56]; // "OXIV"
 
 /// Backup container structure
 #[derive(Debug, Clone)]
