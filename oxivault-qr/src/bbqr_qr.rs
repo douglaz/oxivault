@@ -175,7 +175,7 @@ impl BBQrAnimator {
     }
 
     /// Advance to next frame
-    pub fn next(&mut self) -> Option<&QrCode> {
+    pub fn next_frame(&mut self) -> Option<&QrCode> {
         self.current_frame = (self.current_frame + 1) % self.qr_codes.len();
         self.current()
     }

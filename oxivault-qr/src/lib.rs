@@ -1,10 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(
-    clippy::inherent_to_string,
-    clippy::manual_memcpy,
-    clippy::should_implement_trait,
-    clippy::wrong_self_convention
-)]
 
 //! QR code generation and parsing for OxiVault
 

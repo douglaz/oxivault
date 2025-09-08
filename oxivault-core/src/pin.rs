@@ -102,8 +102,8 @@ impl PinManager {
 
         // Constant-time comparison
         let mut diff = 0u8;
-        for i in 0..32 {
-            diff |= self.pin_hash[i] ^ provided_hash[i];
+        for (a, b) in self.pin_hash.iter().zip(provided_hash.iter()) {
+            diff |= a ^ b;
         }
 
         if diff == 0 {

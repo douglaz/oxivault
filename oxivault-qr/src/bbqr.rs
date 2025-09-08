@@ -111,19 +111,6 @@ pub struct BBQrHeader {
 }
 
 impl BBQrHeader {
-    /// Create header string for QR code
-    pub fn to_string(&self) -> String {
-        format!(
-            "B${}{}${:04X}{:04X}{:08X}{:08X}",
-            self.file_type.code(),
-            self.encoding_type.code(),
-            self.total_parts,
-            self.part_number,
-            self.data_length,
-            u32::from_be_bytes(self.checksum)
-        )
-    }
-
     /// Parse header from string
     pub fn from_string(s: &str) -> Result<Self> {
         if !s.starts_with("B$") || s.len() < 29 {
@@ -154,6 +141,21 @@ impl BBQrHeader {
             data_length,
             checksum: checksum_val.to_be_bytes(),
         })
+    }
+}
+
+impl core::fmt::Display for BBQrHeader {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "B${}{}${:04X}{:04X}{:08X}{:08X}",
+            self.file_type.code(),
+            self.encoding_type.code(),
+            self.total_parts,
+            self.part_number,
+            self.data_length,
+            u32::from_be_bytes(self.checksum)
+        )
     }
 }
 
@@ -301,9 +303,7 @@ impl BBQrEncoder {
         if i < data.len() {
             let remaining = data.len() - i;
             let mut padded = [0u8; 4];
-            for j in 0..remaining {
-                padded[j] = data[i + j];
-            }
+            padded[..remaining].copy_from_slice(&data[i..]);
 
             let value = u32::from_be_bytes(padded);
             let mut encoded = [0u8; 5];

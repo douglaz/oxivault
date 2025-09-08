@@ -40,7 +40,7 @@ impl UrType {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "crypto-psbt" => Some(UrType::CryptoPSBT),
             "crypto-hdkey" => Some(UrType::CryptoHDKey),
@@ -254,7 +254,7 @@ impl UrDecoder {
         }
 
         // Parse type
-        let ur_type = UrType::from_str(parts[0]).ok_or("Unknown UR type")?;
+        let ur_type = UrType::parse(parts[0]).ok_or("Unknown UR type")?;
 
         // Verify type consistency
         if let Some(existing_type) = self.ur_type {
@@ -267,7 +267,7 @@ impl UrDecoder {
 
         if parts.len() == 2 {
             // Single-part UR
-            let data = self.from_bywords(parts[1])?;
+            let data = self.decode_bywords(parts[1])?;
             self.parts = vec![Some(data)];
             self.total_parts = Some(1);
         } else if parts.len() >= 4 {
@@ -296,7 +296,7 @@ impl UrDecoder {
             }
 
             // Decode and store part
-            let data = self.from_bywords(parts[3])?;
+            let data = self.decode_bywords(parts[3])?;
 
             // Parse part header if this is a multi-part message
             if data.len() >= 16 {
@@ -391,7 +391,7 @@ impl UrDecoder {
     }
 
     /// Convert bywords to bytes
-    fn from_bywords(&self, bywords: &str) -> Result<Vec<u8>> {
+    fn decode_bywords(&self, bywords: &str) -> Result<Vec<u8>> {
         // Simplified bywords decoding
         const BYWORDS: &[u8] = b"0123456789abcdefghijklmnopqrstuv";
         let mut result = Vec::new();
@@ -489,7 +489,7 @@ mod tests {
         // Test exact roundtrip
         let test_data = b"Hello, World!";
         let encoded = encoder.to_bywords(test_data);
-        let decoded = decoder.from_bywords(&encoded)?;
+        let decoded = decoder.decode_bywords(&encoded)?;
 
         println!("Original: {} bytes: {:?}", test_data.len(), test_data);
         println!("Decoded:  {} bytes: {:?}", decoded.len(), &decoded[..]);
@@ -568,10 +568,10 @@ mod tests {
     #[test]
     fn test_ur_types() {
         assert_eq!(UrType::CryptoPSBT.to_string(), "crypto-psbt");
-        assert_eq!(UrType::from_str("crypto-psbt"), Some(UrType::CryptoPSBT));
+        assert_eq!(UrType::parse("crypto-psbt"), Some(UrType::CryptoPSBT));
 
         assert_eq!(UrType::CryptoHDKey.to_string(), "crypto-hdkey");
-        assert_eq!(UrType::from_str("crypto-hdkey"), Some(UrType::CryptoHDKey));
+        assert_eq!(UrType::parse("crypto-hdkey"), Some(UrType::CryptoHDKey));
     }
 
     #[test]

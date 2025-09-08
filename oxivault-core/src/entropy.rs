@@ -104,7 +104,7 @@ impl PlayingCard {
     }
 
     /// Parse from string notation (e.g., "AS" for Ace of Spades)
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn parse(s: &str) -> Result<Self> {
         if s.len() < 2 {
             return Err(Error::InvalidEntropy("Card notation too short".into()));
         }
@@ -285,7 +285,7 @@ impl EntropyGenerator {
     pub fn parse_card_string(s: &str) -> Result<Vec<PlayingCard>> {
         let mut cards = Vec::new();
         for card_str in s.split_whitespace() {
-            cards.push(PlayingCard::from_str(card_str)?);
+            cards.push(PlayingCard::parse(card_str)?);
         }
         Ok(cards)
     }
@@ -432,11 +432,11 @@ mod tests {
         assert_eq!(ace_spades.index(), 39);
 
         // Test parsing
-        assert_eq!(PlayingCard::from_str("AS")?.index(), 39);
-        assert_eq!(PlayingCard::from_str("2C")?.index(), 1);
-        assert_eq!(PlayingCard::from_str("KH")?.index(), 38);
-        assert_eq!(PlayingCard::from_str("10D")?.index(), 22);
-        assert_eq!(PlayingCard::from_str("TD")?.index(), 22);
+        assert_eq!(PlayingCard::parse("AS")?.index(), 39);
+        assert_eq!(PlayingCard::parse("2C")?.index(), 1);
+        assert_eq!(PlayingCard::parse("KH")?.index(), 38);
+        assert_eq!(PlayingCard::parse("10D")?.index(), 22);
+        assert_eq!(PlayingCard::parse("TD")?.index(), 22);
 
         // Test invalid cards
         assert!(PlayingCard::new(4, 1).is_err());

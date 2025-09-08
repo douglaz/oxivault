@@ -141,7 +141,7 @@ impl DerivationPaths {
     }
 
     /// Parse derivation path from string (e.g., "m/84'/0'/0'/0/0")
-    pub fn from_str(path: &str) -> Result<DerivationPath> {
+    pub fn parse(path: &str) -> Result<DerivationPath> {
         path.parse()
             .map_err(|_| Error::InvalidDerivationPath(path.into()))
     }
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(path.to_string(), "84'/0'/0'/0/0");
 
         // Test path parsing - it accepts "m/" prefix but doesn't display it
-        let parsed = DerivationPaths::from_str("m/84'/0'/0'/0/0")?;
+        let parsed = DerivationPaths::parse("m/84'/0'/0'/0/0")?;
         assert_eq!(parsed.to_string(), "84'/0'/0'/0/0");
 
         // Test creating other BIP paths

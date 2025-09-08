@@ -122,8 +122,8 @@ impl MiniscriptCompiler {
                     }
 
                     let first = scripts.remove(0);
-                    scripts.into_iter().fold(Ok(first), |acc, script| {
-                        acc.map(|a| Miniscript::And(Box::new(a), Box::new(script)))
+                    scripts.into_iter().try_fold(first, |acc, script| {
+                        Ok(Miniscript::And(Box::new(acc), Box::new(script)))
                     })
                 } else {
                     // True threshold
@@ -149,11 +149,8 @@ impl MiniscriptCompiler {
             Policy::AfterTime(time) => {
                 // Convert unix time to block height (BIP 65)
                 // If >= 500000000, it's a unix timestamp
-                if *time >= 500_000_000 {
-                    Ok(Miniscript::After(*time))
-                } else {
-                    Ok(Miniscript::After(*time))
-                }
+                // Both unix timestamps and block heights are handled the same way
+                Ok(Miniscript::After(*time))
             }
 
             Policy::HashPreimage(hash_type, hash) => {
