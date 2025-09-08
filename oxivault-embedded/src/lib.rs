@@ -1,8 +1,11 @@
+//! OxiVault Embedded - Hardware wallet firmware using Embassy-rs
+
 #![no_std]
 #![allow(async_fn_in_trait)]
 
-//! OxiVault Embedded - Hardware wallet firmware using Embassy-rs
+extern crate alloc;
 
+pub mod backup;
 pub mod drivers;
 pub mod hal;
 #[cfg(feature = "nrf52840")]

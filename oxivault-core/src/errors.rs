@@ -1,7 +1,7 @@
 //! Error types for OxiVault core
 
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::{format, string::String};
 
 /// Core error type for OxiVault operations
 #[derive(Debug, Clone)]
@@ -59,3 +59,9 @@ impl std::error::Error for Error {}
 
 /// Result type for OxiVault operations
 pub type Result<T> = core::result::Result<T, Error>;
+
+impl From<bitcoin::bip32::Error> for Error {
+    fn from(e: bitcoin::bip32::Error) -> Self {
+        Error::BitcoinError(format!("BIP32 error: {:?}", e))
+    }
+}
