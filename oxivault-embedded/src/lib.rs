@@ -12,6 +12,7 @@ pub mod hal;
 pub mod hal_nrf;
 pub mod secure_element;
 
+use alloc::boxed::Box;
 use core::fmt::Write;
 use defmt::info;
 use embassy_executor::Spawner;
@@ -70,7 +71,7 @@ pub enum WalletState {
     Locked,
     EnteringPin,
     GeneratingMnemonic,
-    DisplayingMnemonic(Vec<&'static str, 24>),
+    DisplayingMnemonic(Box<Vec<&'static str, 24>>),
     DerivingAddress,
     DisplayingAddress(String<64>),
     SigningTransaction,
@@ -85,6 +86,25 @@ impl<H: HardwareWallet> WalletStateMachine<H> {
             pin_attempts: 3,
             authenticated: false,
         }
+    }
+
+    /// Generate mock mnemonic words from entropy
+    /// In production, this would use BIP39 word list
+    fn generate_mock_mnemonic(entropy: &[u8; 32]) -> Vec<&'static str, 24> {
+        // Mock word list - in production, use actual BIP39 words
+        const WORDS: [&str; 24] = [
+            "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
+            "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid",
+            "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual",
+        ];
+
+        let mut result = Vec::new();
+        for i in 0..WORDS.len() {
+            // Use entropy to pseudo-randomize word selection
+            let idx = (entropy[i % 32] as usize + i) % WORDS.len();
+            let _ = result.push(WORDS[idx]);
+        }
+        result
     }
 
     /// Run the main state machine
@@ -139,12 +159,12 @@ impl<H: HardwareWallet> WalletStateMachine<H> {
                     self.hardware.display_text("Generating mnemonic...").await;
                     let entropy = self.hardware.get_entropy().await;
 
-                    // For now, show a placeholder until no_std mnemonic generation is fixed
-                    self.hardware
-                        .display_text("Mnemonic generated (placeholder)")
-                        .await;
-                    Timer::after(Duration::from_secs(2)).await;
-                    self.state = WalletState::Idle;
+                    // Store entropy for seed generation
+                    // In a real implementation, we would generate BIP39 mnemonic words here
+                    // For now, create a mock mnemonic from entropy
+                    let words = Self::generate_mock_mnemonic(&entropy);
+
+                    self.state = WalletState::DisplayingMnemonic(Box::new(words));
                 }
                 WalletState::DisplayingMnemonic(words) => {
                     let mut display = heapless::String::<256>::new();

@@ -2,12 +2,8 @@
 //!
 //! Integrates oxivault-core backup functionality with SD card storage
 
-use crate::drivers::sdcard::{SdError, SdFileSystem};
-use alloc::{
-    format,
-    string::{String, ToString},
-    vec::Vec,
-};
+use crate::drivers::sdcard::SdFileSystem;
+use alloc::{format, string::ToString, vec::Vec};
 use bitcoin::bip32::Xpriv;
 use core::str;
 use heapless;

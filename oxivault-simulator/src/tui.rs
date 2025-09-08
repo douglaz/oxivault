@@ -1175,74 +1175,67 @@ impl App {
 
         // Check if it's a BBQr part
         if data.starts_with("B$") {
-            // Initialize or get existing decoder
-            static mut DECODER: Option<BBQrDecoder> = None;
+            // Use thread-safe static decoder
+            use once_cell::sync::Lazy;
+            use std::sync::Mutex;
 
-            unsafe {
-                if DECODER.is_none() {
-                    DECODER = Some(BBQrDecoder::new());
-                }
+            static DECODER: Lazy<Mutex<BBQrDecoder>> = Lazy::new(|| Mutex::new(BBQrDecoder::new()));
 
-                if let Some(decoder) = &mut DECODER {
-                    match decoder.add_part(data) {
-                        Ok(_) => {
-                            if decoder.is_complete() {
-                                match decoder.combine() {
-                                    Ok(decoded_data) => {
-                                        // Try to process the decoded data
-                                        // First try as UTF-8 text (could be mnemonic or JSON)
-                                        let result = if let Ok(text) =
-                                            String::from_utf8(decoded_data.clone())
-                                        {
-                                            // Check if it's a mnemonic
-                                            let words: Vec<&str> =
-                                                text.split_whitespace().collect();
-                                            if words.len() >= 12 && words.len() <= 24 {
-                                                // Try to validate as mnemonic
-                                                match MnemonicManager::from_phrase(&text) {
-                                                    Ok(_) => {
-                                                        self.mnemonic = Some(text.clone());
-                                                        "Mnemonic imported from BBQr".to_string()
-                                                    }
-                                                    Err(_) => {
-                                                        format!(
-                                                            "Text data imported: {} bytes",
-                                                            decoded_data.len()
-                                                        )
-                                                    }
+            if let Ok(mut decoder) = DECODER.lock() {
+                match decoder.add_part(data) {
+                    Ok(_) => {
+                        if decoder.is_complete() {
+                            match decoder.combine() {
+                                Ok(decoded_data) => {
+                                    // Try to process the decoded data
+                                    // First try as UTF-8 text (could be mnemonic or JSON)
+                                    let result = if let Ok(text) =
+                                        String::from_utf8(decoded_data.clone())
+                                    {
+                                        // Check if it's a mnemonic
+                                        let words: Vec<&str> = text.split_whitespace().collect();
+                                        if words.len() >= 12 && words.len() <= 24 {
+                                            // Try to validate as mnemonic
+                                            match MnemonicManager::from_phrase(&text) {
+                                                Ok(_) => {
+                                                    self.mnemonic = Some(text.clone());
+                                                    "Mnemonic imported from BBQr".to_string()
                                                 }
-                                            } else {
-                                                format!(
-                                                    "Text data imported: {} bytes",
-                                                    decoded_data.len()
-                                                )
+                                                Err(_) => {
+                                                    format!(
+                                                        "Text data imported: {} bytes",
+                                                        decoded_data.len()
+                                                    )
+                                                }
                                             }
                                         } else {
-                                            // Binary data - could be PSBT or transaction
-                                            format!("Binary data imported: {} bytes (PSBT processing not yet implemented)", decoded_data.len())
-                                        };
+                                            format!(
+                                                "Text data imported: {} bytes",
+                                                decoded_data.len()
+                                            )
+                                        }
+                                    } else {
+                                        // Binary data - could be PSBT or transaction
+                                        format!("Binary data imported: {} bytes (PSBT processing not yet implemented)", decoded_data.len())
+                                    };
 
-                                        // Reset decoder for next import
-                                        DECODER = None;
-                                        return Ok(result);
-                                    }
-                                    Err(e) => {
-                                        DECODER = None;
-                                        return Err(format!("Failed to decode BBQr: {}", e));
-                                    }
+                                    // Reset decoder for next import
+                                    *decoder = BBQrDecoder::new(); // Reset decoder
+                                    return Ok(result);
                                 }
-                            } else {
-                                let progress = decoder.progress();
-                                return Ok(format!(
-                                    "BBQr part added ({}/{})",
-                                    progress.0, progress.1
-                                ));
+                                Err(e) => {
+                                    *decoder = BBQrDecoder::new(); // Reset decoder
+                                    return Err(format!("Failed to decode BBQr: {}", e));
+                                }
                             }
+                        } else {
+                            let progress = decoder.progress();
+                            return Ok(format!("BBQr part added ({}/{})", progress.0, progress.1));
                         }
-                        Err(e) => {
-                            DECODER = None;
-                            return Err(format!("Failed to add BBQr part: {}", e));
-                        }
+                    }
+                    Err(e) => {
+                        *decoder = BBQrDecoder::new(); // Reset on error
+                        return Err(format!("Failed to add BBQr part: {}", e));
                     }
                 }
             }

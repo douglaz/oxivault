@@ -409,8 +409,8 @@ where
 
         // Return data (skip length byte and CRC)
         let mut result = Vec::new();
-        for i in 1..data_end {
-            let _ = result.push(response[i]);
+        for &byte in response.iter().take(data_end).skip(1) {
+            let _ = result.push(byte);
         }
 
         Ok(result)

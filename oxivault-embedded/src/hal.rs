@@ -2,8 +2,6 @@
 //!
 //! Platform-independent hardware interface definitions
 
-#![no_std]
-
 /// Hardware abstraction layer trait
 pub trait HardwareAbstractionLayer {
     type Display: Display;

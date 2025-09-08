@@ -40,7 +40,7 @@ default = []
 qr = ["oxivault-qr"]
 nrf52840 = ["embassy-nrf", "embassy-usb", "cortex-m", "cortex-m-rt", "static_cell", "embedded-alloc", "critical-section/restore-state-bool"]
 # stm32l4 = ["embassy-stm32", "cortex-m", "cortex-m-rt"]
-# rp2040 = ["embassy-rp", "cortex-m", "cortex-m-rt"]
+rp2040 = ["cortex-m", "cortex-m-rt"]  # embassy-rp temporarily disabled due to version conflicts
 # esp32c3 = ["esp-hal"]
 
 [lib]

@@ -3,11 +3,8 @@
 //! Driver for SSD1306 128x64 OLED displays commonly used in hardware wallets
 //! Supports both I2C and SPI interfaces
 
-#![no_std]
-
-use defmt::*;
 use embedded_graphics_core::{geometry::Size, pixelcolor::BinaryColor, prelude::*, Pixel};
-use embedded_hal_async::{i2c::I2c, spi::SpiDevice};
+use embedded_hal_async::i2c::I2c;
 use heapless::Vec;
 
 /// Display size
@@ -303,7 +300,7 @@ where
             TextSize::Large => 9,
         };
 
-        for (i, _ch) in text.chars().enumerate() {
+        for i in 0..text.chars().count() {
             let px = x + (i as i32 * char_width);
             if px >= 0 && px < DISPLAY_WIDTH as i32 {
                 self.set_pixel(px as u32, y as u32, true);

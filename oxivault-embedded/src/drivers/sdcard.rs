@@ -402,8 +402,8 @@ where
         for i in 0..blocks_needed {
             let block = self.sd.read_block(base_block + 1 + i as u32).await?;
             let bytes_to_copy = core::cmp::min(512, size - result.len());
-            for j in 0..bytes_to_copy {
-                let _ = result.push(block[j]);
+            for &byte in block.iter().take(bytes_to_copy) {
+                let _ = result.push(byte);
             }
         }
 
@@ -414,13 +414,13 @@ where
     pub async fn list_backups(&mut self) -> Result<[bool; 16], SdError> {
         let mut slots = [false; 16];
 
-        for slot in 0..16 {
+        for (slot, slot_status) in slots.iter_mut().enumerate() {
             let base_block = (slot as u32) * 16;
             let header_block = self.sd.read_block(base_block).await?;
 
             // Check magic bytes
             if header_block[4] == 0x42 && header_block[5] == 0x55 {
-                slots[slot] = true;
+                *slot_status = true;
             }
         }
 

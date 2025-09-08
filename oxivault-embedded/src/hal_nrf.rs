@@ -2,8 +2,6 @@
 //!
 //! Provides concrete implementations for the nRF52840 development board
 
-#![no_std]
-
 use crate::{
     drivers::ssd1306::{I2cInterface, Rotation, Ssd1306, TextSize},
     hal::{
@@ -160,6 +158,10 @@ impl Display for Nrf52840Display {
     }
 
     async fn write_text(&mut self, text: &str, x: u16, y: u16) -> Result<(), Error> {
+        // Store text in buffer for potential reuse/debugging
+        self.buffer.clear();
+        let _ = self.buffer.push_str(text);
+
         self.driver
             .draw_text(text, x as i32, y as i32, TextSize::Small);
         self.driver.flush().await.map_err(|_| Error::DisplayError)
@@ -167,9 +169,18 @@ impl Display for Nrf52840Display {
 
     #[cfg(feature = "qr")]
     async fn show_qr(&mut self, data: &[u8]) -> Result<(), Error> {
-        // QR code rendering would go here
-        // For now, just display text
-        self.write_text("[QR Code]", 40, 28).await
+        // Display QR code data as hex for debugging
+        // In production, this would render actual QR code pixels
+        let mut display_text = heapless::String::<64>::new();
+        use core::fmt::Write;
+        let _ = write!(display_text, "QR[{}B]:", data.len());
+
+        // Show first few bytes as hex
+        for &byte in data.iter().take(4) {
+            let _ = write!(display_text, "{:02X}", byte);
+        }
+
+        self.write_text(&display_text, 20, 28).await
     }
 
     async fn show_menu(&mut self, items: &[&str], selected: usize) -> Result<(), Error> {
