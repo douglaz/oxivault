@@ -978,7 +978,7 @@ mod hex_utils {
 
     pub fn decode(s: &str) -> Result<Vec<u8>, ()> {
         // Convert hex string to bytes
-        if s.len() % 2 != 0 {
+        if !s.len().is_multiple_of(2) {
             return Err(());
         }
 

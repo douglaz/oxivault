@@ -1,4 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(
+    clippy::manual_try_fold,
+    clippy::if_same_then_else,
+    clippy::needless_range_loop,
+    clippy::manual_flatten
+)]
 
 //! OxiVault Core - Bitcoin primitives for hardware wallets
 //!
