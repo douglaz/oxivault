@@ -109,8 +109,8 @@ impl MiniscriptCompiler {
                     }
 
                     let first = scripts.remove(0);
-                    scripts.into_iter().fold(Ok(first), |acc, script| {
-                        acc.map(|a| Miniscript::Or(Box::new(a), Box::new(script)))
+                    scripts.into_iter().try_fold(first, |acc, script| {
+                        Ok(Miniscript::Or(Box::new(acc), Box::new(script)))
                     })
                 } else if *k == subs.len() {
                     // All of them (AND tree)

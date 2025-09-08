@@ -223,9 +223,7 @@ impl<R: crate::rng::RandomSource> ShamirSecretSharing<R> {
         let mut shares = Vec::new();
 
         // For each byte of the secret
-        for byte_idx in 0..secret.len() {
-            let secret_byte = secret[byte_idx];
-
+        for &secret_byte in secret.iter() {
             // Generate random polynomial coefficients
             let mut coefficients = vec![secret_byte];
             for _ in 1..threshold {
@@ -346,9 +344,8 @@ impl<R: crate::rng::RandomSource> ShamirSecretSharing<R> {
             let mut numerator = 1u8;
             let mut denominator = 1u8;
 
-            for j in 0..points.len() {
+            for (j, &(xj, _)) in points.iter().enumerate() {
                 if i != j {
-                    let (xj, _) = points[j];
                     numerator = self.gf256_mul(numerator, self.gf256_sub(x, xj));
                     denominator = self.gf256_mul(denominator, self.gf256_sub(xi, xj));
                 }

@@ -15,7 +15,6 @@ use bitcoin::{
     secp256k1::Secp256k1,
     Address, Network, PublicKey, ScriptBuf,
 };
-use core::str::FromStr;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -541,6 +540,4 @@ mod tests {
 
         Ok(())
     }
-
-    use core::str::FromStr;
 }

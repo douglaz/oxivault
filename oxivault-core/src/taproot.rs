@@ -457,21 +457,19 @@ impl MuSig2Coordinator {
             // Initialize with zero
             let mut aggregate_s = K256Scalar::ZERO;
 
-            for partial_sig_opt in &self.partial_sigs {
-                if let Some(sig_bytes) = partial_sig_opt {
-                    // Extract s value from signature (last 32 bytes)
-                    // Schnorr signature format: R || s (32 + 32 bytes)
-                    let s_bytes = &sig_bytes[32..64];
+            for sig_bytes in self.partial_sigs.iter().flatten() {
+                // Extract s value from signature (last 32 bytes)
+                // Schnorr signature format: R || s (32 + 32 bytes)
+                let s_bytes = &sig_bytes[32..64];
 
-                    // Convert to k256 scalar and add
-                    let s_array: [u8; 32] = s_bytes.try_into().unwrap();
-                    let s_primitive = ScalarPrimitive::<Secp256k1>::from_bytes(&s_array.into());
-                    let s: K256Scalar = Option::from(s_primitive)
-                        .and_then(|p| Option::from(K256Scalar::from(&p)))
-                        .ok_or_else(|| Error::Taproot("Invalid signature scalar".into()))?;
+                // Convert to k256 scalar and add
+                let s_array: [u8; 32] = s_bytes.try_into().unwrap();
+                let s_primitive = ScalarPrimitive::<Secp256k1>::from_bytes(&s_array.into());
+                let s: K256Scalar = Option::from(s_primitive)
+                    .and_then(|p| Option::from(K256Scalar::from(&p)))
+                    .ok_or_else(|| Error::Taproot("Invalid signature scalar".into()))?;
 
-                    aggregate_s += s;
-                }
+                aggregate_s += s;
             }
 
             // Convert back to bytes
