@@ -359,26 +359,15 @@ impl EntropyGenerator {
 
 /// Get hardware entropy from the secure element or RNG
 /// This is used by the backup module for generating salts
+///
+/// In std builds, this uses the operating system's RNG.
+/// In no_std builds, this uses getrandom which can be configured
+/// with a custom backend via register_custom_getrandom!() macro.
 pub fn get_hardware_entropy(buffer: &mut [u8]) -> Result<()> {
-    #[cfg(feature = "std")]
-    {
-        // Use system RNG when std is available
-        use rand::RngCore;
-        let mut rng = rand::thread_rng();
-        rng.fill_bytes(buffer);
-        Ok(())
-    }
-
-    #[cfg(not(feature = "std"))]
-    {
-        // In embedded, this would use the hardware RNG
-        // For now, use a deterministic fill for no_std builds
-        // Real implementation would use hardware RNG peripheral
-        for (i, byte) in buffer.iter_mut().enumerate() {
-            *byte = ((i * 31 + 17) % 256) as u8;
-        }
-        Ok(())
-    }
+    // Use getrandom for both std and no_std
+    // In std builds, it automatically uses OS RNG
+    // In no_std builds, it uses the registered custom backend
+    getrandom::getrandom(buffer).map_err(|e| Error::InvalidEntropy(format!("RNG failed: {e}")))
 }
 
 #[cfg(test)]

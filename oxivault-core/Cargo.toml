@@ -24,6 +24,7 @@ hmac = { version = "0.12", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic"], optional = true }
+getrandom = { version = "0.2", default-features = false, features = ["custom"] }
 
 [features]
 default = ["std", "musig2"]

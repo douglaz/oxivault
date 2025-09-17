@@ -10,6 +10,7 @@ pub mod drivers;
 pub mod hal;
 #[cfg(feature = "nrf52840")]
 pub mod hal_nrf;
+pub mod rng;
 pub mod secure_element;
 
 use alloc::boxed::Box;
